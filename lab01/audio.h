@@ -1,3 +1,4 @@
+// Little audio module using libsndfile to write and read wav files in float arrays
 #ifndef AUDIO_H
 #define AUDIO_H
 
