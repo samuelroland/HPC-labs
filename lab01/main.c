@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
         return 1;
     }
-    
+
     if (strcmp(argv[1], "encode") == 0) {
         if (argc != 4) {
             print_usage(argv[0]);
@@ -23,6 +23,6 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
         return 1;
     }
-    
+
     return 0;
 }

@@ -1,6 +1,6 @@
+#include <sndfile.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sndfile.h>
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -18,16 +18,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    SF_FORMAT_INFO	format_info ;
-    format_info.format = sfinfo.format ;
-    sf_command (infile, SFC_GET_FORMAT_INFO, &format_info, sizeof (format_info)) ;
+    SF_FORMAT_INFO format_info;
+    format_info.format = sfinfo.format;
+    sf_command(infile, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
 
     printf("Informations sur le fichier '%s':\n", input_filename);
     printf("  - Format : %08x  %s %s\n", format_info.format, format_info.name, format_info.extension);
     printf("  - Nombre de canaux : %d\n", sfinfo.channels);
     printf("  - Fréquence d'échantillonnage : %d Hz\n", sfinfo.samplerate);
-    printf("  - Nombre d'échantillons : %lld\n", (long long)sfinfo.frames);
-    printf("  - Durée : %.2f secondes\n", (double)sfinfo.frames / sfinfo.samplerate);
+    printf("  - Nombre d'échantillons : %lld\n", (long long) sfinfo.frames);
+    printf("  - Durée : %.2f secondes\n", (double) sfinfo.frames / sfinfo.samplerate);
 
     if ((sfinfo.format & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV) {
         fprintf(stderr, "Erreur: Le fichier n'est pas au format WAV.\n");
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    float *buffer = (float *)malloc(sfinfo.frames * sfinfo.channels * sizeof(float));
+    float *buffer = (float *) malloc(sfinfo.frames * sfinfo.channels * sizeof(float));
     if (!buffer) {
         fprintf(stderr, "Erreur: Impossible d'allouer de la mémoire.\n");
         sf_close(infile);
@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     sf_count_t frames_read = sf_readf_float(infile, buffer, sfinfo.frames);
     if (frames_read != sfinfo.frames) {
         fprintf(stderr, "Avertissement: Seuls %lld frames sur %lld ont été lus.\n",
-                (long long)frames_read, (long long)sfinfo.frames);
+                (long long) frames_read, (long long) sfinfo.frames);
     }
 
     sf_close(infile);
