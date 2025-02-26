@@ -7,6 +7,7 @@ void write_text_file(const char *filename, const char *content) {
     size_t size = strlen(content);
     FILE *file = fopen(filename, "w");
     fwrite(content, size, 1, file);
+    fclose(file);
 }
 
 // Read a file given by filename and return a pointer to a
@@ -21,7 +22,9 @@ char *read_text_file(const char *filename) {
     size_t read_count = fread(buff, 1, size, file);
     if (read_count != size) {
         fprintf(stderr, "Error: only read %lu bytes from %s, but file size is %lu.", read_count, filename, size);
+        fclose(file);
         return NULL;
     }
+    fclose(file);
     return buff;
 }

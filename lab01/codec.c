@@ -1,54 +1,88 @@
-// Mix 2 frequencies following this formula: s(t) = A × (sin(2πflow t) + sin(2πfhigh t))
 #include "codec.h"
-#include <cstddef>
+#include <assert.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
-float mix_frequency(float first, float second) {
-    return AMPLITUDE * (sin(2 * M_PI * first * SAMPLING_TIME) + sin(2 * M_PI * second * SAMPLING_TIME));
-}
+#include <sys/types.h>
 
-// Cell number starts at 0 !!
-float cell_number_to_mix(char cell_number) {
-    return mix_frequency(LINES_FREQ[cell_number % 3], COLUMNS_FREQ[cell_number / 3]);
+// Mix 2 frequencies following this formula: s(t) = A × (sin(2πflow t) + sin(2πfhigh t))
+float mix_frequency(float first, float second, int t) {
+    return AMPLITUDE * (sin(2 * M_PI * first * t) + sin(2 * M_PI * second * t));
 }
 
 // Convert given letter char to cell number, because it's an irregular schema of sometimes 3 groups, sometimes 4, sometimes outside of a-z
-char letter_to_cell_number(char c) {
-    if (c >= 'a' && c <= 'r') {
-        return (c - 'a') / 3 + 1;// + 1 because the cell 0 doesn't have any letters
-    } else if (c >= 's' && c <= 'y') {
-        return (c - 'a' - 1) / 3 + 1;// -1 because s to y are shifted to left, + 1 same reason as above
-    } else if (c == 'z') {
-        return 8;// 9th cell
-    } else if (c == '.' || c == '?' || c == '!') {
-        return 9;// 10th cell
-    } else if (c == ' ') {
-        return 10;// 11th cell
-    }
-    return -1;
-}
-
-
-// Convert a given char to a floating value as the final frequency
-float char_to_sound(char c) {
-    // Digits encoding
+RepeatedBtn char_to_repeated_btn(char c) {
+    // Managing digits first
     if (c >= '0' && c <= '9') {
         char n = c - '0';
         if (n == 0) {
-            return mix_frequency(LINES_FREQ[3], COLUMNS_FREQ[1]);
+            return (RepeatedBtn) {.btn_index = 10, .repetition = 1};
         } else {
-            cell_number_to_mix(n - 1);
+            return (RepeatedBtn) {.btn_index = n - 1, .repetition = 1};
         }
-    } else if (c >= 'a' && c <= 'z') {
-        return cell_number_to_mix(letter_to_cell_number(c));
     }
-    return -1;
+
+    // And all letters and special chars after
+    if (c >= 'a' && c <= 'r') {
+        return (RepeatedBtn) {.btn_index = (c - 'a') / 3 + 1, .repetition = (c - 'a') % 3 + 1};// + 1 because the cell 0 doesn't have any letters
+    } else if (c >= 's' && c <= 'y') {
+        return (RepeatedBtn) {.btn_index = (c - 'a' - 1) / 3 + 1, .repetition = ((c - 'a') - 1) % 3 + 1};// -1 because s to y are shifted to left, + 1 same reason as above
+    } else if (c == 'z') {
+        return (RepeatedBtn) {.btn_index = 8, .repetition = 4};// 9th cell
+    } else if (c == '.') {
+        return (RepeatedBtn) {.btn_index = 9, .repetition = 1};// 10th cell
+    } else if (c == '!') {
+        return (RepeatedBtn) {.btn_index = 9, .repetition = 2};// 10th cell
+    } else if (c == '?') {
+        return (RepeatedBtn) {.btn_index = 9, .repetition = 3};// 10th cell
+    } else if (c == '#') {
+        return (RepeatedBtn) {.btn_index = 9, .repetition = 1};// 10th cell
+    } else if (c == ' ') {
+        return (RepeatedBtn) {.btn_index = 10, .repetition = 1};// 11th cell
+    }
+    return (RepeatedBtn) {.btn_index = -1, .repetition = 0};// invalid character
 }
 
-void dtmf_encode(const char *text, float *audio_result) {
+float **generate_all_frequencies_buffers() {
+    float **buffers = malloc(BTN_NUMBER * sizeof(float *));
+    for (int i = 0; i < BTN_NUMBER; i++) {
+        buffers[i] = malloc(SAMPLES_NUMBER_PER_BTN * sizeof(float));
+        float first = LINES_FREQ[i % 3];
+        float second = COLUMNS_FREQ[i / 3];
+        for (int j = 0; j < SAMPLES_NUMBER_PER_BTN; j++) {
+            buffers[i][j] = mix_frequency(first, second, j / SAMPLE_RATE);// TODO: / SAMPLE_RATE or by SAMPLES_NUMBER_PER_BTN ??
+        }
+    }
+    return buffers;
+}
+
+int8_t dtmf_encode(const char *text, float *audio_result) {
     size_t text_length = strlen(text);
-    size_t audio_size = text_length * 1212;
+    RepeatedBtn *repeated_btns_for_text = calloc(text_length, sizeof(RepeatedBtn));
+    size_t breaks_count = 0;      // number of breaks between each letter
+    size_t tones_count = 0;       // number of tones to play (the 's' key will generate 5 tones of the 8th button)
+    size_t short_breaks_count = 0;// number of short breaks between repeated buttons
+
+    for (int i = 0; i < text_length; i++) {
+        breaks_count++;
+        char c = text[i];
+        RepeatedBtn btn = char_to_repeated_btn(c);
+        assert(btn.btn_index > 0);
+        tones_count += btn.repetition;
+        short_breaks_count += btn.repetition - 1;
+        repeated_btns_for_text[i] = btn;
+    }
+    breaks_count--;// no breaks at the end
+
+    size_t audio_size = tones_count * SAMPLES_NUMBER_PER_BTN + short_breaks_count * SHORT_BREAK_SAMPLES_COUNT + breaks_count * SAMPLES_NUMBER_PER_BTN;
+    audio_result = calloc(audio_size, sizeof(float));
+    if (!audio_result) return -1;
+
+    // audio_result[] TODO fill audio_result with copied buffers from generate_all_frequencies_buffers() results !
+
+    return 0;
 }
 
-void dtmf_decode(const float *audio_buffer, char *result_text) {
+int8_t dtmf_decode(const float *audio_buffer, char *result_text) {
 }
