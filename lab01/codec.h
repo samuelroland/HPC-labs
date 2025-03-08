@@ -10,12 +10,13 @@
 #define SAMPLE_RATE 44100// the audio frequency -> number of sample per second
 // 1. Une durée d’un son de 0.2 secondes par caractère.
 #define CHAR_SOUND_DURATION 0.2
-#define SAMPLES_NUMBER_PER_BTN (SAMPLE_RATE * CHAR_SOUND_DURATION)// 44100 * 0.2 = 8820
+#define SAMPLES_NUMBER_PER_BTN 8820// (SAMPLE_RATE * CHAR_SOUND_DURATION) = 44100 * 0.2 = 8820
 // 2. Une pause de 0.2 secondes entre deux caractères.
 #define CHAR_SOUND_BREAK 0.2
+#define SILENCE_SAMPLES_COUNT 8820// same as above
 // 3. Une pause de 0.05 secondes entre plusieurs pressions pour un même caractère.
 #define SAME_CHAR_SOUND_BREAK 0.05
-#define SHORT_BREAK_SAMPLES_COUNT (SAMPLE_RATE * SAME_CHAR_SOUND_BREAK)// 44100 * 0.05 = 2205
+#define SHORT_BREAK_SAMPLES_COUNT 2205// (SAMPLE_RATE * SAME_CHAR_SOUND_BREAK)// 44100 * 0.05 = 2205
 
 // Repeated button struct to store both values together
 typedef struct {

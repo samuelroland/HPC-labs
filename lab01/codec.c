@@ -1,4 +1,5 @@
 #include "codec.h"
+#include "audio.h"
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
@@ -60,12 +61,11 @@ float **generate_all_frequencies_buffers() {
 int8_t dtmf_encode(const char *text, float *audio_result) {
     size_t text_length = strlen(text);
     RepeatedBtn *repeated_btns_for_text = calloc(text_length, sizeof(RepeatedBtn));
-    size_t breaks_count = 0;      // number of breaks between each letter
-    size_t tones_count = 0;       // number of tones to play (the 's' key will generate 5 tones of the 8th button)
-    size_t short_breaks_count = 0;// number of short breaks between repeated buttons
+    size_t tones_count = 0;               // number of tones to play (the 's' key will generate 5 tones of the 8th button)
+    size_t short_breaks_count = 0;        // number of short breaks between repeated tones
+    size_t breaks_count = text_length - 1;// number of breaks, there is no break at the end
 
     for (int i = 0; i < text_length; i++) {
-        breaks_count++;
         char c = text[i];
         RepeatedBtn btn = char_to_repeated_btn(c);
         assert(btn.btn_index > 0);
@@ -73,13 +73,30 @@ int8_t dtmf_encode(const char *text, float *audio_result) {
         short_breaks_count += btn.repetition - 1;
         repeated_btns_for_text[i] = btn;
     }
-    breaks_count--;// no breaks at the end
 
     size_t audio_size = tones_count * SAMPLES_NUMBER_PER_BTN + short_breaks_count * SHORT_BREAK_SAMPLES_COUNT + breaks_count * SAMPLES_NUMBER_PER_BTN;
     audio_result = calloc(audio_size, sizeof(float));
     if (!audio_result) return -1;
 
-    // audio_result[] TODO fill audio_result with copied buffers from generate_all_frequencies_buffers() results !
+    // Prepare audio_result by copying floats array from generate_all_frequencies_buffers() to easily apply tones
+    float **freqs_buffers = generate_all_frequencies_buffers();
+    float *cursor = audio_result;
+    for (int i = 0; i < text_length; i++) {
+        RepeatedBtn *btn = &repeated_btns_for_text[i];
+        float *src = freqs_buffers[btn->btn_index];
+        for (u_int8_t j = 0; j < btn->repetition; j++) {
+            if (j > 0) cursor += SHORT_BREAK_SAMPLES_COUNT;// skipping short break silence between repeated tones
+            memcpy(cursor, src, SAMPLES_NUMBER_PER_BTN);
+            cursor += SAMPLES_NUMBER_PER_BTN;// skipping just copied values
+        }
+        cursor += SILENCE_SAMPLES_COUNT;// skipping the silence after the complete letter
+    }
+
+    // Free everything allocated locally
+    for (int i = 0; i < BTN_NUMBER; i++) {
+        free(freqs_buffers[i]);
+    }
+    free(freqs_buffers);
 
     return 0;
 }

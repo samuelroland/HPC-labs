@@ -22,13 +22,14 @@ int main(int argc, char *argv[]) {
             print_usage(argv[0]);
             return 1;
         }
-        char *text = read_text_file(argv[1]);
+        char *text = read_text_file(argv[2]);
         float *audio_result = NULL;
         if (text) {
             dtmf_encode(text, audio_result);
             // TODO: manage encoding errors
-            write_wav_file(argv[1], audio_result);
+            write_wav_file(argv[3], audio_result);
             // TODO: manage write errors
+            printf("Successfully written encoded audio in %s", argv[3]);
         }
         free(text);
         free(audio_result);
