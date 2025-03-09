@@ -1,14 +1,15 @@
 #include "codec.h"
-#include "audio.h"
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
 // Mix 2 frequencies following this formula: s(t) = A × (sin(2πflow t) + sin(2πfhigh t))
-float mix_frequency(float first, float second, int t) {
+float mix_frequency(float first, float second, float t) {
     return AMPLITUDE * (sin(2 * M_PI * first * t) + sin(2 * M_PI * second * t));
 }
 
@@ -49,16 +50,17 @@ float **generate_all_frequencies_buffers() {
     float **buffers = malloc(BTN_NUMBER * sizeof(float *));
     for (int i = 0; i < BTN_NUMBER; i++) {
         buffers[i] = malloc(SAMPLES_NUMBER_PER_BTN * sizeof(float));
-        float first = LINES_FREQ[i % 3];
-        float second = COLUMNS_FREQ[i / 3];
+        int first = LINES_FREQ[i % 3];
+        int second = COLUMNS_FREQ[i / 3];
         for (int j = 0; j < SAMPLES_NUMBER_PER_BTN; j++) {
-            buffers[i][j] = mix_frequency(first, second, j / SAMPLE_RATE);// TODO: / SAMPLE_RATE or by SAMPLES_NUMBER_PER_BTN ??
+            buffers[i][j] = mix_frequency(first, second, (float) j / SAMPLE_RATE);// TODO: / SAMPLE_RATE or by SAMPLES_NUMBER_PER_BTN ??
+            printf("\nMixing frequency %d and %d for button %d sample %d results in %.2f", first, second, i, j, buffers[i][j]);
         }
     }
     return buffers;
 }
 
-int8_t dtmf_encode(const char *text, float *audio_result) {
+int64_t dtmf_encode(const char *text, float **audio_result) {
     size_t text_length = strlen(text);
     RepeatedBtn *repeated_btns_for_text = calloc(text_length, sizeof(RepeatedBtn));
     size_t tones_count = 0;               // number of tones to play (the 's' key will generate 5 tones of the 8th button)
@@ -75,12 +77,13 @@ int8_t dtmf_encode(const char *text, float *audio_result) {
     }
 
     size_t audio_size = tones_count * SAMPLES_NUMBER_PER_BTN + short_breaks_count * SHORT_BREAK_SAMPLES_COUNT + breaks_count * SAMPLES_NUMBER_PER_BTN;
-    audio_result = calloc(audio_size, sizeof(float));
-    if (!audio_result) return -1;
+    *audio_result = calloc(audio_size, sizeof(float));
+    if (!*audio_result) return -1;
 
     // Prepare audio_result by copying floats array from generate_all_frequencies_buffers() to easily apply tones
     float **freqs_buffers = generate_all_frequencies_buffers();
-    float *cursor = audio_result;
+
+    float *cursor = *audio_result;
     for (int i = 0; i < text_length; i++) {
         RepeatedBtn *btn = &repeated_btns_for_text[i];
         float *src = freqs_buffers[btn->btn_index];
@@ -98,7 +101,7 @@ int8_t dtmf_encode(const char *text, float *audio_result) {
     }
     free(freqs_buffers);
 
-    return 0;
+    return audio_size;
 }
 
 int8_t dtmf_decode(const float *audio_buffer, char *result_text) {

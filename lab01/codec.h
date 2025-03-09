@@ -6,7 +6,7 @@
 #define LINES_FREQ (int[]){697, 770, 852, 941}
 #define COLUMNS_FREQ (int[]){1209, 1336, 1477}
 #define BTN_NUMBER 11    // 11 buttons (the last one is not used)
-#define AMPLITUDE 50000  // TODO tester avec 1
+#define AMPLITUDE 1      // TODO tester avec 1
 #define SAMPLE_RATE 44100// the audio frequency -> number of sample per second
 // 1. Une durée d’un son de 0.2 secondes par caractère.
 #define CHAR_SOUND_DURATION 0.2
@@ -25,8 +25,10 @@ typedef struct {
 } RepeatedBtn;
 
 // DTMF encoding from given text and store results in audio_result
-// It doesn't free text but allocates audio_result to the correct size
-int8_t dtmf_encode(const char *text, float *audio_result);
+// It expects the text to encode and pointer to a pointer on float set to NULL
+// It will allocate audio_result to the correct size and fill the float values
+// It returns the number of samples allocated
+int64_t dtmf_encode(const char *text, float **audio_result);
 
 int8_t dtmf_decode(const float *audio_buffer, char *result_text);
 

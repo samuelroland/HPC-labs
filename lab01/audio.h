@@ -4,7 +4,9 @@
 
 // Use libsndfile to write an array of audio frequency values to encode in the .wav file
 // It doesn't do any dynamic allocations
-void write_wav_file(const char *filename, const float *freqs);
+#include <sndfile.h>
+
+void write_wav_file(const char *filename, const float *freqs, sf_count_t samples_count);
 
 // Use libsndfile to write an array of audio frequency values to encode in the .wav file
 // It dynamically allocates freqs
