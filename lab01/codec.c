@@ -27,17 +27,20 @@ RepeatedBtn char_to_repeated_btn(char c) {
 
     // And all letters and special chars after
     if (c >= 'a' && c <= 'r') {
-        return (RepeatedBtn) {.btn_index = (c - 'a') / 3 + 1, .repetition = (c - 'a') % 3 + 1};// + 1 because the cell 0 doesn't have any letters
-    } else if (c >= 's' && c <= 'y') {
-        return (RepeatedBtn) {.btn_index = (c - 'a' - 1) / 3 + 1, .repetition = ((c - 'a') - 1) % 3 + 1};// -1 because s to y are shifted to left, + 1 same reason as above
+        return (RepeatedBtn) {.btn_index = (c - 'a') / 3 + 1,  // + 1 because the cell 0 doesn't have any letters
+                              .repetition = (c - 'a') % 3 + 2};// + 2 because we start at 2 repetition at minimum
+    } else if (c == 's') {
+        return (RepeatedBtn) {.btn_index = 6, .repetition = 5};
+    } else if (c > 's' && c <= 'y') {
+        return (RepeatedBtn) {.btn_index = (c - 'a' - 1) / 3 + 1, .repetition = ((c - 'a') - 1) % 3 + 2};// -1 because s to y are shifted to left, + 2 same reason as above
     } else if (c == 'z') {
-        return (RepeatedBtn) {.btn_index = 8, .repetition = 4};// 9th cell
+        return (RepeatedBtn) {.btn_index = 8, .repetition = 5};// 9th cell
     } else if (c == '.') {
-        return (RepeatedBtn) {.btn_index = 9, .repetition = 1};// 10th cell
-    } else if (c == '!') {
         return (RepeatedBtn) {.btn_index = 9, .repetition = 2};// 10th cell
-    } else if (c == '?') {
+    } else if (c == '!') {
         return (RepeatedBtn) {.btn_index = 9, .repetition = 3};// 10th cell
+    } else if (c == '?') {
+        return (RepeatedBtn) {.btn_index = 9, .repetition = 4};// 10th cell
     } else if (c == '#') {
         return (RepeatedBtn) {.btn_index = 9, .repetition = 1};// 10th cell
     } else if (c == ' ') {
