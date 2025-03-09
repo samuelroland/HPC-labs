@@ -1,3 +1,3 @@
 build
 input.txt
-output.wav
+*.wav

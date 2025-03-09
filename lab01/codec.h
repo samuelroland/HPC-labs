@@ -17,6 +17,7 @@
 // 3. Une pause de 0.05 secondes entre plusieurs pressions pour un même caractère.
 #define SAME_CHAR_SOUND_BREAK 0.05
 #define SHORT_BREAK_SAMPLES_COUNT 2205// (SAMPLE_RATE * SAME_CHAR_SOUND_BREAK)// 44100 * 0.05 = 2205
+#define SUPPORTED_ALPHABET "0123456789abcdefghijklmnopqrstuvwxyz.!?# "
 
 // Repeated button struct to store both values together
 typedef struct {
@@ -32,4 +33,6 @@ int64_t dtmf_encode(const char *text, float **audio_result);
 
 int8_t dtmf_decode(const float *audio_buffer, char *result_text);
 
+// Utils functions exposed for testing
+RepeatedBtn char_to_repeated_btn(char c);
 #endif// !CODEC_H
