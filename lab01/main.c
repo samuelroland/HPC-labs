@@ -1,5 +1,6 @@
 #include "audio.h"
-#include "codec.h"
+#include "decoder.h"
+#include "encoder.h"
 #include "file.h"
 #include <sndfile-64.h>
 #include <stddef.h>
@@ -28,7 +29,6 @@ int main(int argc, char *argv[]) {
         float *audio_result = NULL;
         if (text) {
             sf_count_t samples_count = dtmf_encode(text, &audio_result);
-            // TODO: manage encoding errors
             if (samples_count < 1) {
                 printf("Error on dtmf encoding %lu\n", samples_count);
             } else {
