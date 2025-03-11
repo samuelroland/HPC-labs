@@ -79,9 +79,7 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     if (col == -1) {
         return BTN_NOT_FOUND;
     }
-    u_int8_t found_btn_index = col / 3 + line % 3;
-
-    return found_btn_index;
+    return line * 3 + col;
 #endif
 }
 
