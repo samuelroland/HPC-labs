@@ -58,7 +58,6 @@ float **generate_all_frequencies_buffers() {
         int second = COLUMNS_FREQ[i / 3];
         for (int j = 0; j < TONE_SAMPLES_COUNT; j++) {
             buffers[i][j] = mix_frequency(first, second, (float) j / SAMPLE_RATE);// TODO: / SAMPLE_RATE or by TONE_SAMPLES_COUNT ??
-            printf("\nMixing frequency %d and %d for button %d sample %d results in %.2f", first, second, i, j, buffers[i][j]);
         }
     }
     return buffers;
@@ -74,6 +73,7 @@ int64_t dtmf_encode(const char *text, float **audio_result) {
     for (int i = 0; i < text_length; i++) {
         char c = text[i];
         RepeatedBtn btn = char_to_repeated_btn(c);
+        printf("Btn %d with repet %d\n", btn.btn_index, btn.repetition);
         assert(btn.btn_index >= 0);
         assert(btn.repetition > 0);
         tones_count += btn.repetition;

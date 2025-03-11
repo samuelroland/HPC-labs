@@ -25,7 +25,7 @@ int write_wav_file(const char *filename, const float *freqs, sf_count_t samples_
     return 0;
 }
 
-int read_wav_file(const char *filename, const float *freqs, sf_count_t *samples_count) {
+int read_wav_file(const char *filename, float **freqs, sf_count_t *samples_count) {
     SF_INFO sfinfo;
     SNDFILE *infile = sf_open(filename, SFM_READ, &sfinfo);
     if (!infile) {
@@ -50,14 +50,14 @@ int read_wav_file(const char *filename, const float *freqs, sf_count_t *samples_
         return 1;
     }
 
-    float *buffer = (float *) malloc(sfinfo.frames * sfinfo.channels * sizeof(float));
-    if (!buffer) {
+    *freqs = (float *) malloc(sfinfo.frames * sfinfo.channels * sizeof(float));
+    if (!freqs) {
         fprintf(stderr, "Erreur: Impossible d'allouer de la mémoire.\n");
         sf_close(infile);
         return 1;
     }
 
-    sf_count_t frames_read = sf_readf_float(infile, buffer, sfinfo.frames);
+    sf_count_t frames_read = sf_readf_float(infile, *freqs, sfinfo.frames);
     if (frames_read != sfinfo.frames) {
         fprintf(stderr, "Avertissement: Seuls %lld frames sur %lld ont été lus.\n",
                 (long long) frames_read, (long long) sfinfo.frames);

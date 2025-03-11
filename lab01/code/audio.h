@@ -11,6 +11,6 @@ int write_wav_file(const char *filename, const float *freqs, sf_count_t samples_
 
 // Use libsndfile to write an array of audio frequency values to encode in the .wav file
 // It dynamically allocates freqs
-int read_wav_file(const char *filename, const float *freqs, sf_count_t *samples_count);
+int read_wav_file(const char *filename, float **freqs, sf_count_t *samples_count);
 
 #endif// !AUDIO_H

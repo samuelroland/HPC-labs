@@ -39,14 +39,22 @@ int main(int argc, char *argv[]) {
         float *audio_freqs = NULL;
         sf_count_t samples_count = 0;
         char *result_text = NULL;
-        int result = read_wav_file(argv[2], audio_freqs, &samples_count);
-        if (!result && samples_count > 0) {
-            int decode_result = dtmf_decode(audio_freqs, samples_count, result_text);
-            if (decode_result != 0) {
-                printf("Error on dtmf decoding for %lu samples on %s\n", samples_count, argv[2]);
+        printf("slaut;\n");
+        int result = read_wav_file(argv[2], &audio_freqs, &samples_count);
+        printf("yoop %lu;\n", samples_count);
+        if (result == 0 && samples_count > 0) {
+            if (audio_freqs != NULL) {
+                int decode_result = dtmf_decode(audio_freqs, samples_count, &result_text);
+                if (decode_result != 0) {
+                    printf("Error on dtmf decoding for %lu samples on %s\n", samples_count, argv[2]);
+                } else {
+                    printf("Text decoded to: %s", result_text);
+                }
             } else {
-                printf("Text decoded to: %s", result_text);
+                printf("Failed to read file");
             }
+        } else {
+            printf("Error somewhere\n");
         }
         free(result_text);
         free(audio_freqs);
