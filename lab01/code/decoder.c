@@ -55,10 +55,10 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 #if DECODER_VARIANT == 2
     float f1, f2;
     find_main_frequencies(audio_chunk, TONE_SAMPLES_COUNT, SAMPLE_RATE, &f1, &f2);
-    printf("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
     if (f1 < FFT_FREQ_THRESHOLD && f1 > -1 || f2 < FFT_FREQ_THRESHOLD && f2 > -1) {
         return BTN_NOT_FOUND;// that's very near 0, that's probably a silence...
     }
+    printf("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
     int col = -1;
     int line = -1;
 
@@ -132,9 +132,9 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
             char c = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
             if (c != '\0') {
                 (*result_text)[letter_index++] = c;
-                printf("\n>> FOUND LETTER: %c: under btn %d, with %lu repetition\n\n", c, current_btn, tone_repetition);
+                printf(">> FOUND LETTER: %c: under btn %d, with %lu repetition\n", c, current_btn, tone_repetition);
             } else {
-                printf("\n>> FOUND INVALID CHAR: under btn %d, with %lu repetition\n\n", current_btn, tone_repetition);
+                printf("\n>> FOUND INVALID CHAR: under btn %d, with %lu repetition\n", current_btn, tone_repetition);
             }
 
             // jumping at the end of the silence duration to search for next tone after that

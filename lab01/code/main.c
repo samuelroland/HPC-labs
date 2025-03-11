@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
                 if (decode_result != 0) {
                     printf("Error on dtmf decoding for %lu samples on %s\n", samples_count, argv[2]);
                 } else {
-                    printf("Text decoded to: %s\n", result_text);
+                    printf("\n>> Text decoded to: %s\n\n", result_text);
                 }
             } else {
                 printf("Failed to read file");
