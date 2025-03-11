@@ -50,12 +50,13 @@ RepeatedBtn char_to_repeated_btn(char c) {
     return (RepeatedBtn) {.btn_index = -1, .repetition = 0};// invalid character
 }
 
+// Generate one buffer of float per tone, so we can easily "copy paste" this tone when we want to insert a given tone in the final audio buffer
 float **generate_all_frequencies_buffers() {
     float **buffers = malloc(BTN_NUMBER * sizeof(float *));
     for (int i = 0; i < BTN_NUMBER; i++) {
         buffers[i] = malloc(TONE_SAMPLES_COUNT * sizeof(float));
-        int first = LINES_FREQ[i % 3];
-        int second = COLUMNS_FREQ[i / 3];
+        int first = LINES_FREQ[i / 3];
+        int second = COLUMNS_FREQ[i % 3];
         for (int j = 0; j < TONE_SAMPLES_COUNT; j++) {
             buffers[i][j] = mix_frequency(first, second, (float) j / SAMPLE_RATE);// TODO: / SAMPLE_RATE or by TONE_SAMPLES_COUNT ??
         }

@@ -1,6 +1,7 @@
 #include "decoder.h"
 #include "const.h"
 #include "encoder.h"
+#include "fft.h"
 #include <assert.h>
 #include <math.h>
 #include <sndfile-64.h>
@@ -30,6 +31,9 @@ float get_near_score(const float *audio_chunk, float *reference_tone) {
 
 // Calculate the average of scores to detect outliers
 u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
+
+#if DECODER_VARIANT == 1
+
     float min_distance_btn = 200;
     u_int8_t min_btn = BTN_NOT_FOUND;
     for (int i = 0; i < BTN_NUMBER; i++) {
@@ -47,6 +51,38 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
         printf("BTN_NOT_FOUND\n");
         return BTN_NOT_FOUND;
     }
+#endif
+
+#if DECODER_VARIANT == 2
+    float f1, f2;
+    find_main_frequencies(audio_chunk, TONE_SAMPLES_COUNT, SAMPLE_RATE, &f1, &f2);
+    printf("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
+    int col = -1;
+    int line = -1;
+    for (int i = 0; i < 4; i++) {
+        float diff = LINES_FREQ[i] - f1;
+        if (diff < FFT_FREQ_THRESHOLD && diff > -FFT_FREQ_THRESHOLD) {
+            line = i;
+            break;
+        }
+    }
+    if (line == -1) {
+        return BTN_NOT_FOUND;
+    }
+    for (int i = 0; i < 3; i++) {
+        float diff = COLUMNS_FREQ[i] - f2;
+        if (diff < FFT_FREQ_THRESHOLD && diff > -FFT_FREQ_THRESHOLD) {
+            col = i;
+            break;
+        }
+    }
+    if (col == -1) {
+        return BTN_NOT_FOUND;
+    }
+    u_int8_t found_btn_index = col / 3 + line % 3;
+
+    return found_btn_index;
+#endif
 }
 
 int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, char **result_text) {
@@ -81,6 +117,7 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
             if (tone_repetition == 0) {
                 printf("Skipping silence\n");
                 cursor_index += SILENCE_SAMPLES_COUNT;// or maybe SHORT_BREAK_SAMPLES_COUNT ?
+                long tone_repetition = 0;
                 continue;
             }
 
