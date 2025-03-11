@@ -105,5 +105,4 @@ Benchmark 1: ./build/dtmf_encdec decode long.wav
 ```
 
 ## Comparison
-My 2 variant are strangely very near, I thought the FFT would be slower but that's not the case...
-
+My 2 variant are strangely very near (`29.3` and `28.7`, `126.3 ms` and `127.9 ms`), I thought the FFT would be slower but that's not the case... The range is bigger. I don't know how I can analyse this further actually...
