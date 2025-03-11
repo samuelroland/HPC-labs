@@ -39,9 +39,7 @@ int main(int argc, char *argv[]) {
         float *audio_freqs = NULL;
         sf_count_t samples_count = 0;
         char *result_text = NULL;
-        printf("slaut;\n");
         int result = read_wav_file(argv[2], &audio_freqs, &samples_count);
-        printf("yoop %lu;\n", samples_count);
         if (result == 0 && samples_count > 0) {
             if (audio_freqs != NULL) {
                 int decode_result = dtmf_decode(audio_freqs, samples_count, &result_text);

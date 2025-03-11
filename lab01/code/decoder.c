@@ -38,7 +38,6 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     u_int8_t min_btn = BTN_NOT_FOUND;
     for (int i = 0; i < BTN_NUMBER; i++) {
         float score = get_near_score(audio_chunk, freqs_buffers[i]);
-        printf("btn %d, score: %f\n", i, score);
         if (score < min_distance_btn) {
             min_distance_btn = score;
             min_btn = i;
@@ -57,11 +56,23 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     float f1, f2;
     find_main_frequencies(audio_chunk, TONE_SAMPLES_COUNT, SAMPLE_RATE, &f1, &f2);
     printf("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
+    if (f1 < FFT_FREQ_THRESHOLD && f1 > -1 || f2 < FFT_FREQ_THRESHOLD && f2 > -1) {
+        return BTN_NOT_FOUND;// that's very near 0, that's probably a silence...
+    }
     int col = -1;
     int line = -1;
+
+    // Swap them if needed to make further iterations easier
+    if (f1 > f2) {
+        float tmp = f1;
+        f1 = f2;
+        f2 = tmp;
+    }
+
+    // Now we can assume the f1 is the frequency of line, and f1 for the column
     for (int i = 0; i < 4; i++) {
-        float diff = LINES_FREQ[i] - f1;
-        if (diff < FFT_FREQ_THRESHOLD && diff > -FFT_FREQ_THRESHOLD) {
+        float diff = abs(LINES_FREQ[i] - (int) f1);
+        if (diff < FFT_FREQ_THRESHOLD) {
             line = i;
             break;
         }
@@ -70,8 +81,8 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
         return BTN_NOT_FOUND;
     }
     for (int i = 0; i < 3; i++) {
-        float diff = COLUMNS_FREQ[i] - f2;
-        if (diff < FFT_FREQ_THRESHOLD && diff > -FFT_FREQ_THRESHOLD) {
+        float diff = abs(COLUMNS_FREQ[i] - (int) f2);
+        if (diff < FFT_FREQ_THRESHOLD) {
             col = i;
             break;
         }
@@ -79,7 +90,9 @@ u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     if (col == -1) {
         return BTN_NOT_FOUND;
     }
-    return line * 3 + col;
+    int btn = line * 3 + col;
+    return btn;
+
 #endif
 }
 
@@ -89,14 +102,12 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     long maximum_text_buffer_size = samples_count / (TONE_SAMPLES_COUNT + SILENCE_SAMPLES_COUNT) + 2;
 
     *result_text = calloc(maximum_text_buffer_size, sizeof(char));
-    printf("Allocated %ld for result_text", maximum_text_buffer_size);
     if (!*result_text) {
         printf("Error: couldn't allocate result text buffer\n");
         return 1;
     }
 
     sf_count_t cursor_index = 0;
-    long tone_index = 0;
     long letter_index = 0;
     long tone_repetition = 0;
     bool searching_next_tone = false;//we didn't find the first tone at the very first
@@ -106,12 +117,10 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     // we know we reached the end of a letter, so we can skip SILENCE_SAMPLES_COUNT - SHORT_BREAK_SAMPLES_COUNT
     // and except if we reached the end, we are sure to find a tone.
     while (cursor_index < samples_count) {
-        printf("Searching btn on chunk at cursor_index = %lu, with tone_index = %ld and tone_repetition = %ld\n", cursor_index, tone_index, tone_repetition);
+        // printf("Searching btn on chunk at cursor_index = %lu, with tone_index = %ld and tone_repetition = %ld\n", cursor_index, tone_index, tone_repetition);
         u_int8_t found_btn = detect_button(audio_buffer + cursor_index, freqs_buffers);
         if (found_btn == BTN_NOT_FOUND) {
-            if (tone_index == 0) {
-                printf("First %d samples must be a tone ! The tone was not detected.\n", TONE_SAMPLES_COUNT);
-            }
+
             if (tone_repetition == 0) {
                 printf("Skipping silence\n");
                 cursor_index += SILENCE_SAMPLES_COUNT;// or maybe SHORT_BREAK_SAMPLES_COUNT ?
@@ -119,7 +128,6 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
                 continue;
             }
 
-            // printf("\n>> SHOULD found letter: under btn %d, with %lu repetition\n\n", current_btn, tone_repetition);
             // that's a silence, so we just finished must calculate the current letter based on tone_repetition
             char c = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
             if (c != '\0') {
@@ -134,13 +142,24 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
             // Resetting state for a future letter
             tone_repetition = 0;
             searching_next_tone = false;
-            tone_index++;
+            current_btn = BTN_NOT_FOUND;
         } else {
-            searching_next_tone = true;
-            current_btn = found_btn;// TODO: what to do if we find another tone after short break ?
-            tone_repetition++;
-            tone_index++;
-            cursor_index += TONE_SAMPLES_COUNT + SHORT_BREAK_SAMPLES_COUNT;
+            // Changed to another tone so this is the end of the letter and the start of the next one
+            if (current_btn != BTN_NOT_FOUND && current_btn != found_btn) {
+                char c = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
+                if (c != '\0') {
+                    (*result_text)[letter_index++] = c;
+                    printf("\n>> FOUND LETTER: %c: under btn %d, with %lu repetition\n\n", c, current_btn, tone_repetition);
+                }
+                cursor_index += TONE_SAMPLES_COUNT + SHORT_BREAK_SAMPLES_COUNT;
+                current_btn = found_btn;
+                tone_repetition = 1;// for next round
+            } else {
+                searching_next_tone = true;
+                current_btn = found_btn;// TODO: what to do if we find another tone after short break ?
+                tone_repetition++;
+                cursor_index += TONE_SAMPLES_COUNT + SHORT_BREAK_SAMPLES_COUNT;
+            }
         }
     }
 
