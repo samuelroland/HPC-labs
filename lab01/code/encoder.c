@@ -45,7 +45,7 @@ RepeatedBtn char_to_repeated_btn(char c) {
     } else if (c == '#') {
         return (RepeatedBtn) {.btn_index = 9, .repetition = 1};// 10th cell
     } else if (c == ' ') {
-        return (RepeatedBtn) {.btn_index = 10, .repetition = 1};// 11th cell
+        return (RepeatedBtn) {.btn_index = 10, .repetition = 2};// 11th cell
     }
     return (RepeatedBtn) {.btn_index = -1, .repetition = 0};// invalid character
 }

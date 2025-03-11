@@ -19,4 +19,5 @@ set bin ../code/build/dtmf_encdec
 for file in (ls audio_pack)
     color blue "Decoding $file"
     $bin decode audio_pack/$file
+    or return
 end
