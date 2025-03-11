@@ -78,6 +78,7 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     long maximum_text_buffer_size = samples_count / (TONE_SAMPLES_COUNT + SILENCE_SAMPLES_COUNT) + 2;
 
     *result_text = calloc(maximum_text_buffer_size, sizeof(char));
+    printf("Allocated %ld for result_text", maximum_text_buffer_size);
     if (!*result_text) {
         printf("Error: couldn't allocate result text buffer\n");
         return 1;
@@ -101,11 +102,13 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
                 printf("First %d samples must be a tone ! The tone was not detected.\n", TONE_SAMPLES_COUNT);
             }
 
+            printf("\n>> SHOULD found letter: under btn %d, with %lu repetition\n\n", current_btn, tone_repetition);
             // that's a silence, so we just finished must calculate the current letter based on tone_repetition
             char c = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
             if (c != '\0') {
-                *result_text[letter_index++] = c;
-                printf("\n>> FOUND LETTER: %c: under btn %d, with %lu repetition\n\n", *result_text[letter_index - 1], current_btn, tone_repetition);
+                printf("yooooo %d \n", letter_index);
+                (*result_text)[letter_index++] = c;
+                printf("\n>> FOUND LETTER: %c: under btn %d, with %lu repetition\n\n", c, current_btn, tone_repetition);
             } else {
                 printf("\n>> FOUND INVALID CHAR: under btn %d, with %lu repetition\n\n", current_btn, tone_repetition);
                 exit(1);// todo yes ?
@@ -127,12 +130,10 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     }
 
     // Manage last letter
-    *result_text[letter_index++] = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
-    printf("\n>> FOUND LAST LETTER: %c: under btn %d, with %lu repetition\n\n", *result_text[letter_index - 1], current_btn, tone_repetition);
+    (*result_text)[letter_index++] = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
+    printf("\n>> FOUND LAST LETTER: %c: under btn %d, with %lu repetition\n\n", (*result_text)[letter_index - 1], current_btn, tone_repetition);
 
-    *result_text[letter_index] = '\0';
-
-    printf("result_text:  %s", *result_text);
+    (*result_text)[letter_index] = '\0';
 
     return 0;
 }
