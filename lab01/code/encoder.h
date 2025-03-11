@@ -18,4 +18,5 @@ int64_t dtmf_encode(const char *text, float **audio_result);
 
 // Utils functions exposed for testing
 RepeatedBtn char_to_repeated_btn(char c);
+float **generate_all_frequencies_buffers();
 #endif

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void write_text_file(const char *filename, const char *content) {
+void write_file(const char *filename, const char *content) {
     size_t size = strlen(content);
     FILE *file = fopen(filename, "w");
     fwrite(content, size, 1, file);
@@ -12,7 +12,7 @@ void write_text_file(const char *filename, const char *content) {
 
 // Read a file given by filename and return a pointer to a
 // dynamically allocated data with file content or NULL if it fails
-char *read_text_file(const char *filename) {
+char *read_file(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "File %s couldn't be opened", filename);

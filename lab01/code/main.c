@@ -21,11 +21,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[1], "encode") == 0) {
-        if (argc != 4) {
-            print_usage(argv[0]);
-            return 1;
-        }
-        char *text = read_text_file(argv[2]);
+        char *text = read_file(argv[2]);
         float *audio_result = NULL;
         if (text) {
             sf_count_t samples_count = dtmf_encode(text, &audio_result);
@@ -40,7 +36,20 @@ int main(int argc, char *argv[]) {
         free(text);
         free(audio_result);
     } else if (strcmp(argv[1], "decode") == 0) {
-
+        float *audio_freqs = NULL;
+        sf_count_t samples_count = 0;
+        char *result_text = NULL;
+        int result = read_wav_file(argv[2], audio_freqs, &samples_count);
+        if (!result && samples_count > 0) {
+            int decode_result = dtmf_decode(audio_freqs, samples_count, result_text);
+            if (decode_result != 0) {
+                printf("Error on dtmf decoding for %lu samples on %s\n", samples_count, argv[2]);
+            } else {
+                printf("Text decoded to: %s", result_text);
+            }
+        }
+        free(result_text);
+        free(audio_freqs);
     } else {
         print_usage(argv[0]);
         return 1;
