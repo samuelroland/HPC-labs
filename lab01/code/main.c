@@ -2,7 +2,7 @@
 #include "decoder.h"
 #include "encoder.h"
 #include "file.h"
-#include <sndfile-64.h>
+#include <sndfile.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

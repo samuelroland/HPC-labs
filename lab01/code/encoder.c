@@ -1,13 +1,13 @@
 #include "encoder.h"
 #include "const.h"
 #include <assert.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+
 
 // Mix 2 frequencies following this formula: s(t) = A × (sin(2πflow t) + sin(2πfhigh t))
 float mix_frequency(float first, float second, float t) {
@@ -93,7 +93,7 @@ int64_t dtmf_encode(const char *text, float **audio_result) {
     for (int i = 0; i < text_length; i++) {
         RepeatedBtn *btn = &repeated_btns_for_text[i];
         float *src = freqs_buffers[btn->btn_index];
-        for (u_int8_t j = 0; j < btn->repetition; j++) {
+        for (uint8_t j = 0; j < btn->repetition; j++) {
             if (j > 0) cursor += SHORT_BREAK_SAMPLES_COUNT;// skipping short break silence between repeated tones
             memcpy(cursor, src, TONE_SAMPLES_COUNT);
             cursor += TONE_SAMPLES_COUNT;// skipping just copied values
