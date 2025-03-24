@@ -4,13 +4,12 @@
 #include "fft.h"
 #include <assert.h>
 #include <math.h>
-#include <sndfile-64.h>
+#include <sndfile.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
 
 // First decoder implementation based on comparing each possible tone with possible sounds to detect
 // how these tones are near of raw samples buffers for each button
@@ -30,7 +29,7 @@ float get_near_score(const float *audio_chunk, float *reference_tone) {
 }
 
 // Calculate the average of scores to detect outliers
-u_int8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
+uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
 #if DECODER_VARIANT == 1
 
@@ -111,14 +110,14 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     long letter_index = 0;
     long tone_repetition = 0;
     bool searching_next_tone = false;//we didn't find the first tone at the very first
-    u_int8_t current_btn = BTN_NOT_FOUND;
+    uint8_t current_btn = BTN_NOT_FOUND;
 
     // We progress by trying with SHORT_BREAK_SAMPLES_COUNT step, if we don't find a another tone for the same letter
     // we know we reached the end of a letter, so we can skip SILENCE_SAMPLES_COUNT - SHORT_BREAK_SAMPLES_COUNT
     // and except if we reached the end, we are sure to find a tone.
     while (cursor_index < samples_count) {
         // printf("Searching btn on chunk at cursor_index = %lu, with tone_index = %ld and tone_repetition = %ld\n", cursor_index, tone_index, tone_repetition);
-        u_int8_t found_btn = detect_button(audio_buffer + cursor_index, freqs_buffers);
+        uint8_t found_btn = detect_button(audio_buffer + cursor_index, freqs_buffers);
         if (found_btn == BTN_NOT_FOUND) {
 
             if (tone_repetition == 0) {

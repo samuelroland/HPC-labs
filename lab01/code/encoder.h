@@ -2,12 +2,11 @@
 #ifndef ENCODEC_H
 #define ENCODEC_H
 
-#include <sys/types.h>
-
+#include <stdint.h>
 // Repeated button struct to store both values together
 typedef struct {
-    u_int8_t btn_index; // index of the button from 0 to 11 for the 12 buttons
-    u_int8_t repetition;// number of times this frequence must be repeated depending on the letter
+    uint8_t btn_index; // index of the button from 0 to 11 for the 12 buttons
+    uint8_t repetition;// number of times this frequence must be repeated depending on the letter
 } RepeatedBtn;
 
 // DTMF encoding from given text and store results in audio_result

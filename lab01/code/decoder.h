@@ -3,8 +3,7 @@
 #define DECODER_H
 
 #include "const.h"
-#include <sndfile-64.h>
-#include <sys/types.h>
+#include <sndfile.h>
 
 #define MIN_DISTANCE_MAX 0.8// threshold for the variant 1 of distance of float diff allowed to detect silence or button
 #define FFT_FREQ_THRESHOLD 5// 5 hz of diff is allowed
