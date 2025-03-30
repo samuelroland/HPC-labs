@@ -81,89 +81,10 @@ Domain 4:
 	Tag M0: 0 1 2 3 4 5 6 7 8 9 10 11
 ```
 
-I have only one physical socket my machine, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
+I have only one physical socket on my machine, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
 
-We want to skip the first 0 and 1 hardware cores used by the OS, so we pin the program on the core number 2 with `taskset -c 2`, my program is single-threaded. We run the peakflops_sp (single precision because my code only use `float` and no `double`). Using 32KB because this is the L1 data cache size, we don't want to further because we are not calculating the memory bandwidth here. We want to use only 1 thread in the benchmark with `:1`
-```sh
-taskset -c 2 likwid-bench -t peakflops_sp -W N:32kB:1
-```
-```
-Allocate: Process running on hwthread 2 (Domain N) - Vector length 8000/32000 Offset 0 Alignment 1024
---------------------------------------------------------------------------------
-LIKWID MICRO BENCHMARK
-Test: peakflops_sp
---------------------------------------------------------------------------------
-Using 1 work groups
-Using 1 threads
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-Group: 0 Thread 0 Global Thread 0 running on hwthread 2 - Vector length 8000 Offset 0
---------------------------------------------------------------------------------
-Cycles:			2894963770
-CPU Clock:		2611062958
-Cycle Clock:		2611062958
-Time:			1.108730e+00 sec
-Iterations:		65536
-Iterations per thread:	65536
-Inner loop executions:	8000
-Size (Byte):		32000
-Size per thread:	32000
-Number of Flops:	8388608000
-MFlops/s:		7565.96
-Data volume (Byte):	2097152000
-MByte/s:		1891.49
-Cycles per update:	5.521705
-Cycles per cacheline:	88.347283
-Loads per update:	1
-Stores per update:	0
-Load bytes per element:	4
-Store bytes per elem.:	0
-Instructions:		10485760032
-UOPs:			9961472000
---------------------------------------------------------------------------------
-```
-
-```sh
-taskset -c 2 likwid-bench -t peakflops_sp -W N:32kB:1
-```
-```
-Allocate: Process running on hwthread 2 (Domain N) - Vector length 8000/32000 Offset 0 Alignment 1024
---------------------------------------------------------------------------------
-LIKWID MICRO BENCHMARK
-Test: peakflops_sp
---------------------------------------------------------------------------------
-Using 1 work groups
-Using 1 threads
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-Group: 0 Thread 0 Global Thread 0 running on hwthread 2 - Vector length 8000 Offset 0
---------------------------------------------------------------------------------
-Cycles:			2794816360
-CPU Clock:		2611196434
-Cycle Clock:		2611196434
-Time:			1.070320e+00 sec
-Iterations:		32768
-Iterations per thread:	32768
-Inner loop executions:	8000
-Size (Byte):		32000
-Size per thread:	32000
-Number of Flops:	4194304000
-MFlops/s:		3918.74
-Data volume (Byte):	1048576000
-MByte/s:		979.68
-Cycles per update:	10.661378
-Cycles per cacheline:	170.582053
-Loads per update:	1
-Stores per update:	0
-Load bytes per element:	4
-Store bytes per elem.:	0
-Instructions:		5242880032
-UOPs:			4980736000
---------------------------------------------------------------------------------
-```
-TODO: que faire des autres perfs
-
-en mode performance !
+### Searching for maxperf
+We want to skip the first 0 and 1 hardware cores used by the OS, so we pin the program on the core number 2 with `taskset -c 2`, my program is single-threaded. We run the peakflops_sp (single precision because my code only use `float` and no `double`). Using 32KB because this is the L1 data cache size, we don't want to go further because we don't want our measures to be influenced by cache misses as we are not calculating the memory bandwidth here. We want to use only 1 thread in the benchmark with `:1`
 
 ```sh
 taskset -c 2 likwid-bench -t peakflops_sp -W N:32kB:1
@@ -204,13 +125,181 @@ UOPs:			19922944000
 --------------------------------------------------------------------------------
 ```
 
-We find that `MFlops/s: 9206.46`, that we can round to **9206 MFlops/s**
+The interesting line is `MFlops/s: 9206.46`, so we can round the `maxperf` to **9206 MFlops/s**
 
-## Theoritical calculation
-The calculation given in the tutorial: `<num_cores> * <op_width> * <num_ops_per_cycle> * <num_fma> * <cpu_frequency>` = `1 * 1 * 1 * 4.70 GHz = 4.70 GFlops/s = 4700 MFlops/s`
-that's nonsense...
+### Searching for maxband
+CPU cache sizes for core 2
+- L1: 48KB
+- L2: 1280KB
+- L3: 12MB
 
-TODO: okay to have 1 for 32 bits float ?
+Let's start with L1, I chose the `copy` benchmark and I use a vector of `48KB` at it is the cache size.
+<!--TODO: why copy and not load ?-->
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:48KB:1
+Allocate: Process running on hwthread 2 (Domain N) - Vector length 3000/24000 Offset 0 Alignment 512
+Allocate: Process running on hwthread 2 (Domain N) - Vector length 3000/24000 Offset 0 Alignment 512
+--------------------------------------------------------------------------------
+LIKWID MICRO BENCHMARK
+Test: copy
+--------------------------------------------------------------------------------
+Using 1 work groups
+Using 1 threads
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Group: 0 Thread 0 Global Thread 0 running on hwthread 2 - Vector length 3000 Offset 0
+--------------------------------------------------------------------------------
+Cycles:			3882628234
+CPU Clock:		2611024867
+Cycle Clock:		2611024867
+Time:			1.487013e+00 sec
+Iterations:		4194304
+Iterations per thread:	4194304
+Inner loop executions:	750
+Size (Byte):		48000
+Size per thread:	48000
+Number of Flops:	0
+MFlops/s:		0.00
+Data volume (Byte):	201326592000
+MByte/s:		135389.92
+Cycles per update:	0.308564
+Cycles per cacheline:	2.468509
+Loads per update:	1
+Stores per update:	1
+Load bytes per element:	8
+Store bytes per elem.:	8
+Load/store ratio:	1.00
+Instructions:		34603008016
+UOPs:			44040192000
+--------------------------------------------------------------------------------
+```
+The line `MByte/s:		135389.92` gives us the maxband for L1 cache. 
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:48KB:1 | grep MByte
+MByte/s:		135454.60
+> taskset -c 2 likwid-bench -t copy -W N:10KB:1 | grep MByte
+MByte/s:		138042.56
+```
+
+As expected, going further that 48KB means the L1 cache is not sufficient, the L2 takes the relay and we see a massive bandwidth reduction.
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:50KB:1 | grep MByte
+MByte/s:		108108.22
+> taskset -c 2 likwid-bench -t copy -W N:49KB:1 | grep MByte
+MByte/s:		123534.99
+> taskset -c 2 likwid-bench -t copy -W N:53KB:1 | grep MByte
+MByte/s:		102391.57
+> taskset -c 2 likwid-bench -t copy -W N:80KB:1 | grep MByte
+MByte/s:		97608.80
+> taskset -c 2 likwid-bench -t copy -W N:80KB:1 | grep MByte
+MByte/s:		98218.39
+```
+
+Going below 48KB can be faster sometimes.
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:40KB:1 | grep MByte
+MByte/s:		146047.24
+> taskset -c 2 likwid-bench -t copy -W N:20KB:1 | grep MByte
+MByte/s:		142454.28
+> taskset -c 2 likwid-bench -t copy -W N:10KB:1 | grep MByte
+MByte/s:		137338.58
+```
+
+I'm going to take **135000 MByte/s** for L1 as a vague average of these results <= 48KB.
+
+### For L2 cache
+
+Same strategy as before, trying the maximum of `1280KB`
+
+```sh
+taskset -c 2 likwid-bench -t copy -W N:1280KB:1
+```
+```
+Allocate: Process running on hwthread 2 (Domain N) - Vector length 80000/640000 Offset 0 Alignment 512
+Allocate: Process running on hwthread 2 (Domain N) - Vector length 80000/640000 Offset 0 Alignment 512
+--------------------------------------------------------------------------------
+LIKWID MICRO BENCHMARK
+Test: copy
+--------------------------------------------------------------------------------
+Using 1 work groups
+Using 1 threads
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Group: 0 Thread 0 Global Thread 0 running on hwthread 2 - Vector length 80000 Offset 0
+--------------------------------------------------------------------------------
+Cycles:			2772963680
+CPU Clock:		2611130390
+Cycle Clock:		2611130390
+Time:			1.061978e+00 sec
+Iterations:		65536
+Iterations per thread:	65536
+Inner loop executions:	20000
+Size (Byte):		1280000
+Size per thread:	1280000
+Number of Flops:	0
+MFlops/s:		0.00
+Data volume (Byte):	83886080000
+MByte/s:		78990.39
+Cycles per update:	0.528901
+Cycles per cacheline:	4.231207
+Loads per update:	1
+Stores per update:	1
+Load bytes per element:	8
+Store bytes per elem.:	8
+Load/store ratio:	1.00
+Instructions:		14417920016
+UOPs:			18350080000
+--------------------------------------------------------------------------------
+```
+
+
+We get `MByte/s:		78990.39`, but further executions give us $\pm 2000$ around that...
+
+Going with lower values between 48KB and 1280KB gives us more stable results, I guess this is because some other software are running on this core too, the benchmark is not the only one filling this cache.
+
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:800KB:1 | grep MByte
+MByte/s:		98294.43
+> taskset -c 2 likwid-bench -t copy -W N:400KB:1 | grep MByte
+MByte/s:		99025.11
+> taskset -c 2 likwid-bench -t copy -W N:200KB:1 | grep MByte
+MByte/s:		98297.40
+> taskset -c 2 likwid-bench -t copy -W N:100KB:1 | grep MByte
+MByte/s:		98239.87
+> taskset -c 2 likwid-bench -t copy -W N:70KB:1 | grep MByte
+MByte/s:		98103.01
+```
+I'm taking a rough average of **98200 MByte/s** for L2.
+
+### L3
+I find that pretty strange that several execution of small vector of `1MB` gives us very different results...
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:1MB:1 | grep MByte
+MByte/s:		83870.75
+> taskset -c 2 likwid-bench -t copy -W N:1MB:1 | grep MByte
+MByte/s:		90445.30
+> taskset -c 2 likwid-bench -t copy -W N:1MB:1 | grep MByte
+MByte/s:		88562.67
+```
+
+```sh
+> taskset -c 2 likwid-bench -t copy -W N:12MB:1 | grep MByte
+MByte/s:		42956.49
+> taskset -c 2 likwid-bench -t copy -W N:10MB:1 | grep MByte
+MByte/s:		51069.79
+> taskset -c 2 likwid-bench -t copy -W N:8MB:1 | grep MByte
+MByte/s:		56306.97
+> taskset -c 2 likwid-bench -t copy -W N:4MB:1 | grep MByte
+MByte/s:		58439.60
+> taskset -c 2 likwid-bench -t copy -W N:4MB:1 | grep MByte
+MByte/s:		58671.92
+> taskset -c 2 likwid-bench -t copy -W N:3MB:1 | grep MByte
+MByte/s:		58788.55
+> taskset -c 2 likwid-bench -t copy -W N:2MB:1 | grep MByte
+MByte/s:		61931.24
+> taskset -c 2 likwid-bench -t copy -W N:2MB:1 | grep MByte
+MByte/s:		61202.62
+```
 
 ## Note pour la suite
 attention à bien adapter le roofline en fonction du programme qu'on va faire et aux flags d'optimisations.
