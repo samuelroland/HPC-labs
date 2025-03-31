@@ -28,7 +28,7 @@ float get_near_score(const float *audio_chunk, float *reference_tone) {
     for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
         sum += fabs(audio_chunk[i] - reference_tone[i]);
     }
-    LIKWID_MARKER_START("get_near_score");
+    LIKWID_MARKER_STOP("get_near_score");
     return sum / TONE_SAMPLES_COUNT;
 }
 
