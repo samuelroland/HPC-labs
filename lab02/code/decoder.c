@@ -49,9 +49,12 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     }
     if (min_distance_btn < MIN_DISTANCE_MAX) {
         printf("Found button %d with score %f\n", min_btn, min_distance_btn);
+        LIKWID_MARKER_STOP("detect_button");
         return min_btn;
     } else {
         printf("BTN_NOT_FOUND\n");
+
+        LIKWID_MARKER_STOP("detect_button");
         return BTN_NOT_FOUND;
     }
 #endif
@@ -60,6 +63,7 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     float f1, f2;
     find_main_frequencies(audio_chunk, TONE_SAMPLES_COUNT, SAMPLE_RATE, &f1, &f2);
     if (f1 < FFT_FREQ_THRESHOLD && f1 > -1 || f2 < FFT_FREQ_THRESHOLD && f2 > -1) {
+        LIKWID_MARKER_STOP("detect_button");
         return BTN_NOT_FOUND;// that's very near 0, that's probably a silence...
     }
     printf("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
@@ -82,6 +86,7 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
         }
     }
     if (line == -1) {
+        LIKWID_MARKER_STOP("detect_button");
         return BTN_NOT_FOUND;
     }
     for (int i = 0; i < 3; i++) {
@@ -92,14 +97,15 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
         }
     }
     if (col == -1) {
+        LIKWID_MARKER_STOP("detect_button");
         return BTN_NOT_FOUND;
     }
     int btn = line * 3 + col;
+
+    LIKWID_MARKER_STOP("detect_button");
     return btn;
 
 #endif
-
-    LIKWID_MARKER_STOP("detect_button");
 }
 
 int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, char **result_text) {
