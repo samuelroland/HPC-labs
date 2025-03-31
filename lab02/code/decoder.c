@@ -3,6 +3,7 @@
 #include "encoder.h"
 #include "fft.h"
 #include <assert.h>
+#include <likwid-marker.h>
 #include <math.h>
 #include <sndfile.h>
 #include <stdbool.h>
@@ -112,6 +113,9 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     bool searching_next_tone = false;//we didn't find the first tone at the very first
     uint8_t current_btn = BTN_NOT_FOUND;
 
+    LIKWID_MARKER_INIT;
+
+    LIKWID_MARKER_START("while");
     // We progress by trying with SHORT_BREAK_SAMPLES_COUNT step, if we don't find a another tone for the same letter
     // we know we reached the end of a letter, so we can skip SILENCE_SAMPLES_COUNT - SHORT_BREAK_SAMPLES_COUNT
     // and except if we reached the end, we are sure to find a tone.
@@ -166,6 +170,9 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     (*result_text)[letter_index++] = LETTERS_BY_BTN[current_btn][tone_repetition - 1];
 
     (*result_text)[letter_index] = '\0';
+
+    LIKWID_MARKER_STOP("while");
+    LIKWID_MARKER_CLOSE;
 
     return 0;
 }
