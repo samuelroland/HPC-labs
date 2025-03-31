@@ -4,13 +4,13 @@
 #include "file.h"
 #include <sndfile.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 void print_usage(const char *prog) {
     printf("Usage :\n  %s encode input.txt output.wav\n  %s decode input.wav\n", prog, prog);
+    printf("DECODER_VARIANT = %d (1 is float buffer comparison, 2 is via fft)\n", DECODER_VARIANT);
 }
 
 int main(int argc, char *argv[]) {
