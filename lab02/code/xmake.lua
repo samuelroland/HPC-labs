@@ -19,7 +19,7 @@ add_cflags("-g", "-fno-inline")
 target("sandbox")
 add_files("sandbox.c")
 
-target("dtmf_encdec-goertzel")
+target("dtmf_encdec-buffers")
 add_defines("DECODER_VARIANT=1")
 add_files("main.c")
 
