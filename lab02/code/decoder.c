@@ -21,17 +21,21 @@
 #define BTN_NOT_FOUND 100
 
 float get_near_score(const float *audio_chunk, float *reference_tone) {
+
+    LIKWID_MARKER_START("get_near_score");
     double sum = 0;
 
     for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
         sum += fabs(audio_chunk[i] - reference_tone[i]);
     }
+    LIKWID_MARKER_START("get_near_score");
     return sum / TONE_SAMPLES_COUNT;
 }
 
 // Calculate the average of scores to detect outliers
 uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
+    LIKWID_MARKER_START("detect_button");
 #if DECODER_VARIANT == 1
 
     float min_distance_btn = 200;
@@ -94,6 +98,8 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     return btn;
 
 #endif
+
+    LIKWID_MARKER_STOP("detect_button");
 }
 
 int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, char **result_text) {
@@ -115,7 +121,7 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
 
     LIKWID_MARKER_INIT;
 
-    LIKWID_MARKER_START("while");
+    LIKWID_MARKER_START("decode_while_loop");
     // We progress by trying with SHORT_BREAK_SAMPLES_COUNT step, if we don't find a another tone for the same letter
     // we know we reached the end of a letter, so we can skip SILENCE_SAMPLES_COUNT - SHORT_BREAK_SAMPLES_COUNT
     // and except if we reached the end, we are sure to find a tone.
@@ -171,7 +177,7 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
 
     (*result_text)[letter_index] = '\0';
 
-    LIKWID_MARKER_STOP("while");
+    LIKWID_MARKER_STOP("decode_while_loop");
     LIKWID_MARKER_CLOSE;
 
     return 0;
