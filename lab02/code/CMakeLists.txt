@@ -9,24 +9,6 @@ set(DEBUG_FLAGS "-std=c11 -Wall -Wextra -pedantic -g")
 # Inclure les répertoires d'en-têtes
 include_directories(../../lib/stb/ ../include)
 
-# # Chercher tous les fichiers sources
-# file(GLOB SOURCES_test "src/test_likwid.c")
-#
-# # Créer l'exécutable
-# add_executable(test_likwid ${SOURCES_test})
-#
-# # Lier les bibliothèques
-# target_link_libraries(test_likwid m likwid)
-
-# Cible pour le mode debug
-# add_custom_target(debug
-#     COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR} && ${CMAKE_BUILD_TOOL}
-#     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-# )
-#
-# # Spécifier les cibles comme PHONY
-# target_sources(test_likwid PRIVATE ${SOURCES_test})
-
 find_package(FFTW3 REQUIRED)
 find_path(SNDFILE_INCLUDE_DIR sndfile.h REQUIRED)
 find_library(SNDFILE_LIBRARY sndfile REQUIRED)
@@ -46,12 +28,12 @@ target_link_libraries(dtmf_encdec_buffers PRIVATE
     ${SNDFILE_LIBRARY}
     fftw3
     m
+    likwid
 )
-target_link_libraries(dtmf_encdec_buffers m likwid)
 
 # Second target for fft variant
 add_executable(dtmf_encdec_fft main.c encoder.c decoder.c audio.c file.c fft.c)
-target_compile_definitions(dtmf_encdec_fft PRIVATE DECODER_VARIANT=1)
+target_compile_definitions(dtmf_encdec_fft PRIVATE DECODER_VARIANT=2)
 target_include_directories(dtmf_encdec_fft PRIVATE 
     ${SNDFILE_INCLUDE_DIR}
     ${FFTW3_INCLUDE_DIRS}
@@ -60,8 +42,8 @@ target_link_libraries(dtmf_encdec_fft PRIVATE
     ${SNDFILE_LIBRARY}
     fftw3
     m
+    likwid
 )
-target_link_libraries(dtmf_encdec_buffers m likwid)
 
 # Enable all colors
 set(CMAKE_COLOR_DIAGNOSTICS ON)
