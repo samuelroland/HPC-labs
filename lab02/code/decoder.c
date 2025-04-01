@@ -21,7 +21,6 @@
 #define BTN_NOT_FOUND 100
 
 inline float get_near_score(const float *audio_chunk, float *reference_tone) {
-
     LIKWID_MARKER_START("get_near_score");
     double sum = 0;
 
@@ -183,7 +182,7 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
 
     (*result_text)[letter_index] = '\0';
 
-    LIKWID_MARKER_STOP("decode_while_loop");
+    LIKWID_MARKER_STOP("dtmf_decode");
     LIKWID_MARKER_CLOSE;
 
     return 0;
