@@ -1,51 +1,66 @@
-## Roofline
-I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model)
+# HPC Lab 2 - Report
+Author: Samuel Roland
 
-```sh
-likwid-topology
+## My machine
+
+Extract from `fastfetch`
 ```
+OS: Fedora Linux 41 (KDE Plasma) x86_64
+Host: XPS 8930 (1.1.21)
+Kernel: Linux 6.13.5-200.fc41.x86_64
+CPU: Intel(R) Core(TM) i7-8700 (12) @ 4.60 GHz
+GPU 1: NVIDIA GeForce GTX 1060 6GB [Discrete]
+GPU 2: Intel UHD Graphics 630 @ 1.20 GHz [Integrated]
+Memory: 15.32 GiB - DDR4
+Swap: 8.00 GiB
+Disk: 236.87 GiB - btrfs
 ```
+
+![lstopo-sx](./imgs/lstopo-sx.png)
+
+```
+> likwid-topology 
 --------------------------------------------------------------------------------
-CPU name:	12th Gen Intel(R) Core(TM) i7-1255U
-CPU type:	Unknown Intel Processor
-CPU stepping:	4
+CPU name:	Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz
+CPU type:	Intel Coffeelake processor
+CPU stepping:	10
 ********************************************************************************
 Hardware Thread Topology
 ********************************************************************************
 Sockets:		1
-Cores per socket:	10
+Cores per socket:	6
 Threads per core:	2
 --------------------------------------------------------------------------------
 HWThread        Thread        Core        Die        Socket        Available
 0               0             0           0          0             *                
-1               1             0           0          0             *                
-2               0             1           0          0             *                
-3               1             1           0          0             *                
-4               0             2           0          0             *                
-5               0             3           0          0             *                
-6               0             4           0          0             *                
-7               0             5           0          0             *                
-8               0             6           0          0             *                
-9               0             7           0          0             *                
-10              0             8           0          0             *                
-11              0             9           0          0             *                
+1               0             1           0          0             *                
+2               0             2           0          0             *                
+3               0             3           0          0             *                
+4               0             4           0          0             *                
+5               0             5           0          0             *                
+6               1             0           0          0             *                
+7               1             1           0          0             *                
+8               1             2           0          0             *                
+9               1             3           0          0             *                
+10              1             4           0          0             *                
+11              1             5           0          0             *                
 --------------------------------------------------------------------------------
-Socket 0:		( 0 1 2 3 4 5 6 7 8 9 10 11 )
+Socket 0:		( 0 6 1 7 2 8 3 9 4 10 5 11 )
 --------------------------------------------------------------------------------
 ********************************************************************************
 Cache Topology
 ********************************************************************************
 Level:			1
-Size:			48 kB
-Cache groups:		( 0 1 ) ( 2 3 ) ( 4 5 ) ( 6 7 ) ( 8 9 ) ( 10 11 )
+Size:			32 kB
+Cache groups:		( 0 6 ) ( 1 7 ) ( 2 8 ) ( 3 9 ) ( 4 10 ) ( 5 11 )
 --------------------------------------------------------------------------------
 Level:			2
-Size:			1.25 MB
-Cache groups:		( 0 1 ) ( 2 3 ) ( 4 5 ) ( 6 7 ) ( 8 9 ) ( 10 11 )
+Size:			256 kB
+Cache groups:		( 0 6 ) ( 1 7 ) ( 2 8 ) ( 3 9 ) ( 4 10 ) ( 5 11 )
 --------------------------------------------------------------------------------
 Level:			3
 Size:			12 MB
-Cache groups:		( 0 1 2 3 4 5 6 7 8 9 10 11 )
+Cache groups:		( 0 6 1 7 2 8 3 9 4 10 5 11 )
 --------------------------------------------------------------------------------
 ********************************************************************************
 NUMA Topology
@@ -53,37 +68,25 @@ NUMA Topology
 NUMA domains:		1
 --------------------------------------------------------------------------------
 Domain:			0
-Processors:		( 0 1 2 3 4 5 6 7 8 9 10 11 )
+Processors:		( 0 6 1 7 2 8 3 9 4 10 5 11 )
 Distances:		10
-Free memory:		724.945 MB
-Total memory:		15702.8 MB
+Free memory:		1893.86 MB
+Total memory:		15689.5 MB
 --------------------------------------------------------------------------------
 ```
 
-`lstopo` chart
-![lstopo.png](imgs/lstopo.png)
+## Roofline
+I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model) and I'm working on my tour at home, because my laptop is not supported by likwid.
 
 
-```sh
-likwid-bench -p
-```
-```
-Number of Domains 5
-Domain 0:
-	Tag N: 0 1 2 3 4 5 6 7 8 9 10 11
-Domain 1:
-	Tag S0: 0 1 2 3 4 5 6 7 8 9 10 11
-Domain 2:
-	Tag D0: 0 1 2 3 4 5 6 7 8 9 10 11
-Domain 3:
-	Tag C0: 0 1 2 3 4 5 6 7
-Domain 4:
-	Tag M0: 0 1 2 3 4 5 6 7 8 9 10 11
-```
-
-I have only one physical socket on my machine, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
+The lab machine only one physical socket on my machine, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
 
 ### Searching for maxperf
+Which the baseline in the next sections, I know that my program is using more memory than what's available
+```sh
+/usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/short.wav
+```
+
 We want to skip the first 0 and 1 hardware cores used by the OS, so we pin the program on the core number 2 with `taskset -c 2`, my program is single-threaded. We run the peakflops_sp (single precision because my code only use `float` and no `double`). Using 32KB because this is the L1 data cache size, we don't want to go further because we don't want our measures to be influenced by cache misses as we are not calculating the memory bandwidth here. We want to use only 1 thread in the benchmark with `:1`
 
 ```sh
