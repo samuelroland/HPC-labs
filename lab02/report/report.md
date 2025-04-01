@@ -1,7 +1,61 @@
 # HPC Lab 2 - Report
 Author: Samuel Roland
 
+## My code
+
+Setup [Likwid](https://github.com/RRZE-HPC/likwid/) too. For this lab, I maintain both `CMakeLists.txt` and `xmake.lua`, but I use xmake generated binaries in my report.
+
+### Via CMake
+Setup the `fftw` library and `libsnd`, on Fedora here are the DNF packages
+```sh
+sudo dnf install fftw fftw-devel libsndfile-devel
+```
+Setup [Likwid](https://github.com/RRZE-HPC/likwid/) too.
+
+Compile
+```sh
+cmake . -Bbuild && cmake --build build/ -j 8
+```
+
+And run the buffers variant
+```sh
+./build/dtmf_encdec-buffers decode trivial-alphabet.wav
+```
+Or run the fft variant
+```sh
+./build/dtmf_encdec-fft decode trivial-alphabet.wav
+```
+
+### Via Xmake
+Install [xmake](https://xmake.io/#/getting_started)
+```sh
+curl -fsSL https://xmake.io/shget.text | bash
+```
+or via DNF
+```sh
+sudo dnf install xmake
+```
+
+Build the code, it will prompt you to install fft and libsnd dependencies on a global xmake cache
+```sh
+xmake
+```
+
+And run the buffers variant
+```sh
+xmake run dtmf_encdec-buffers decode trivial-alphabet.wav
+# or directly
+./build/linux/x86_64/release/dtmf_encdec-buffers decode trivial-alphabet.wav
+```
+Or run the fft variant
+```sh
+xmake run dtmf_encdec-fft decode trivial-alphabet.wav
+# or directly
+./build/linux/x86_64/release/dtmf_encdec-fft decode trivial-alphabet.wav
+```
+
 ## My machine
+I'm working on my tour at home, because my laptop is not supported by likwid because Intel 12th Gen is not supported currently.
 
 Extract from `fastfetch`
 ```
@@ -76,17 +130,33 @@ Total memory:		15689.5 MB
 ```
 
 ## Roofline
-I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model) and I'm working on my tour at home, because my laptop is not supported by likwid.
+I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model) 
 
+```
+> likwid-bench -p
+Number of Domains 5
+Domain 0:
+	Tag N: 0 6 1 7 2 8 3 9 4 10 5 11
+Domain 1:
+	Tag S0: 0 6 1 7 2 8 3 9 4 10 5 11
+Domain 2:
+	Tag D0: 0 6 1 7 2 8 3 9 4 10 5 11
+Domain 3:
+	Tag C0: 0 6 1 7 2 8 3 9 4 10 5 11
+Domain 4:
+	Tag M0: 0 6 1 7 2 8 3 9 4 10 5 11
+```
 
-The lab machine only one physical socket on my machine, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
+My machine has one physical socket, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
 
-### Searching for maxperf
-Which the baseline in the next sections, I know that my program is using more memory than what's available
+Before starting the maxperf and maxband search I tried to know how much memory is eating
+
+I know that my program is using more memory than what's available
 ```sh
 /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/short.wav
 ```
 
+### Searching for maxperf
 We want to skip the first 0 and 1 hardware cores used by the OS, so we pin the program on the core number 2 with `taskset -c 2`, my program is single-threaded. We run the peakflops_sp (single precision because my code only use `float` and no `double`). Using 32KB because this is the L1 data cache size, we don't want to go further because we don't want our measures to be influenced by cache misses as we are not calculating the memory bandwidth here. We want to use only 1 thread in the benchmark with `:1`
 
 ```sh
