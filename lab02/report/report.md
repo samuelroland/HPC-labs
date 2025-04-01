@@ -274,11 +274,39 @@ That's the current state, without modifications from the last release of lab01.
 Currently decoding `verylong.wav` prints `18307` lines for debugging... maybe this is taking a bit of time to compute these logs and send them.
 
 
+I used a macro LOG that only does something when the `LOGGING` macro is defined, removing any logging code by default.
+```c
+// Macro made by Claude 3.5
+#ifdef LOGGING
+#define LOG(format, ...) printf("[LOG] " format, ##__VA_ARGS__)
+#else
+#define LOG(format, ...) ((void) 0)
+#endif
+```
+Then I replaced any `printf()` occurence by `LOG()` call in `decoder.c`
+
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+|       SP [MFLOP/s]      |   435.4236 |
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep 'Memory bandwidth'
+|    Memory bandwidth [MBytes/s]    |   664.4730 |
+> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav
+  Time (mean ± σ):      3.100 s ±  0.101 s    [User: 2.867 s, System: 0.221 s]
+  Range (min … max):    3.035 s …  3.217 s    3 runs
+```
+The Operationnal Intensity has improved a bit: 0.655292, the flops counter has increase just a bit.
+
+
+### Step 3 - Let the compiler optimize things for us
+
+We can change `-O0 -g -fno-inline` to `-O2` to enable the second group of optimisations, and disable the `-g` that includes debug symbols, and remove the ask to avoid inlining.
+
 ## Table to analyse the progress
-| Step | Time | Memband | Perf | Operationnal Intensity |
+| Step | Time (s) | Mem bandwidth MBytes/s | Perf MFlops/s | Operationnal Intensity |
 | --------------- | --------------- | --------------- | --------------- | --------------- |
-|1 Start | 3.1s | 665.5020 | 425.9479  | 0.64004 |
-|2  |  |  |  |  |
+|1 Start | 3.102 | 665.5020 | 425.9479  | 0.64004 |
+|2  | 3.100 | 664.4730 |  435.4236| 0.655292 |
 |3  |  |  |  |  |
 |4  |  |  |  |  |
 

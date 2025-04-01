@@ -12,7 +12,7 @@ add_links("likwid")
 add_defines("LIKWID_PERFMON")
 
 set_warnings("all")
-add_cflags("-O0", "-g", "-fno-inline")
+add_cflags("-O2")
 -- add_defines("LOGGING")
 
 -- Target definitions

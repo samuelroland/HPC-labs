@@ -3,7 +3,8 @@ project(lab02 C)
 
 # Définir les options de compilation
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "-O0 -g -Wall -fno-inline -DLIKWID_PERFMON")
+# set(CMAKE_C_FLAGS "-O0 -g -Wall -fno-inline -DLIKWID_PERFMON")
+set(CMAKE_C_FLAGS "-O2 -Wall -DLIKWID_PERFMON")
 set(DEBUG_FLAGS "-std=c11 -Wall -Wextra -pedantic -g")
 
 # Inclure les répertoires d'en-têtes
