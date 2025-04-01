@@ -260,11 +260,29 @@ We can now put a baseline **425.9479 MFlops/s** and **665.5020 MBytes/s** on the
 
 ![roofline baseline](./imgs/roofline-baseline.png)
 
-## Starting code optimisations
+As we see, there is big room for improvement, we are far from the limit of CPU calculation limit (the horizontal bar) and we can progress towards the left by minimizing the number of flop per byte.
 
-Table to analyse the progress
+
+## Starting code optimisations
+I'm going to do a few optimisations, measure their progress, document the ones that improved in a table and document how I managed to do them. Some improvements will be listed for future labs.
+
+### Step 1
+That's the current state, without modifications from the last release of lab01.
+
+### Step 2 - Removing debug logs
 
 Currently decoding `verylong.wav` prints `18307` lines for debugging... maybe this is taking a bit of time to compute these logs and send them.
+
+
+## Table to analyse the progress
+| Step | Time | Memband | Perf | Operationnal Intensity |
+| --------------- | --------------- | --------------- | --------------- | --------------- |
+|1 Start | 3.1s | 665.5020 | 425.9479  | 0.64004 |
+|2  |  |  |  |  |
+|3  |  |  |  |  |
+|4  |  |  |  |  |
+
+
 
 ## Note pour la suite
 attention à bien adapter le roofline en fonction du programme qu'on va faire et aux flags d'optimisations.

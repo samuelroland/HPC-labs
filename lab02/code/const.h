@@ -14,4 +14,12 @@
 #define SHORT_BREAK_SAMPLES_COUNT 2205// 44100 * 0.05 = 2205
 #define SUPPORTED_ALPHABET "0123456789abcdefghijklmnopqrstuvwxyz.!?# "
 
+
+// Macro made by Claude 3.5
+#ifdef LOGGING
+#define LOG(format, ...) printf("[LOG] " format, ##__VA_ARGS__)
+#else
+#define LOG(format, ...) ((void) 0)
+#endif
+
 #endif
