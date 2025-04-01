@@ -57,12 +57,12 @@ xmake run dtmf_encdec-fft decode trivial-alphabet.wav
 ## My machine
 I'm working on my tour at home, because my laptop is not supported by likwid because Intel 12th Gen is not supported currently. I asked about news for this support in their issues tracker on issue [Support for Intel Alder Lake 12th gen processors #468](https://github.com/RRZE-HPC/likwid/issues/468#issuecomment-2767312383).
 
-Extract from `fastfetch`
+Extract from `fastfetch` and manually completed
 ```
 OS: Fedora Linux 41 (KDE Plasma) x86_64
 Host: XPS 8930 (1.1.21)
 Kernel: Linux 6.13.5-200.fc41.x86_64
-CPU: Intel(R) Core(TM) i7-8700 (12) @ 4.60 GHz
+CPU: Intel(R) Core(TM) i7-8700 (12) @ 4.60 GHz - Coffeelake
 GPU 1: NVIDIA GeForce GTX 1060 6GB [Discrete]
 GPU 2: Intel UHD Graphics 630 @ 1.20 GHz [Integrated]
 Memory: 15.32 GiB - DDR4
@@ -232,12 +232,40 @@ Combining the maxperf = **9050 MFlops/s** and the maxband = **18600 MByte/s** gi
 
 ![roofline base](./imgs/roofline-base.png)
 
----
+## Profiling my code
+Currently my code is compiled with GCC flags: `-O0 -g -fno-inline`
 
+There are different groups of counters that can be used, depending on the architecture and what likwid is supporting. The most useful for us is the `FLOPS_SP` and `MEM`. We can use them with `-g`. There is also the possibility to pin the program to a given physical thread with `-C 2`, as that's shorter than `taskset -c 2`, I'm using this option here.
 ```sh
-likwid-perfctr -C 2 -g MEM -m ./build/linux/x86_64/release/dtmf_encdec-fft decode $PWD/out.wav
+> likwid-perfctr -a
+...
+FLOPS_SP	Single Precision MFLOP/s
+...
+MEM	Memory bandwidth in MBytes/s
+...
 ```
 
+```sh
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "Memory bandwidth"
+|    Memory bandwidth [MBytes/s]    |   647.8238 |
+```
+
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "  SP \[MFLOP/s\]"
+|       SP [MFLOP/s]      |   458.0617 |
+```
+
+And finally the time measure
+```sh
+> taskset -c 2 hyperfine  "$PWD/build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav"
+Benchmark 1: /home/sam/HPC/HPC-labs/lab02/code/build/linux/x86_64/release/dtmf_encdec-buffers decode /home/sam/HPC/HPC-labs/lab02/code/verylong.wav
+  Time (mean ± σ):      3.100 s ±  0.075 s    [User: 2.870 s, System: 0.216 s]
+  Range (min … max):    3.015 s …  3.204 s    10 runs
+```
+
+## Starting code optimisations
+
+Currently decoding `verylong.wav` prints `18307` lines for debugging... maybe this is taking a bit of time to compute these logs and send them.
 
 ## Note pour la suite
 attention à bien adapter le roofline en fonction du programme qu'on va faire et aux flags d'optimisations.
