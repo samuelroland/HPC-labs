@@ -335,16 +335,63 @@ I added a few markers for each function in `decoder.c`, showing the start marker
 130:    LIKWID_MARKER_START("dtmf_decode");
 ```
 
-When adding `-m` flag we can enable the statistics for each marker. Looking at line `call count`, we can see that `the`
+When adding `-m` flag we can enable the statistics for each marker. Looking at line `call count`, we can see that `get_near_score` is called **157289 times**! Same reflexion for `detect_button`.
 ```sh
-> likwid-perfctr -C 2 -g FLOPS_SP -m ./build/linux/x86_64/release/dtmf_encdec_buffers decode base.wav  &| grep -P "Region [a-z]|call count"
-Region decode_while_loop, Group 1: FLOPS_SP
-|     call count    |          1 |
+> likwid-perfctr -C 2 -g FLOPS_SP -m ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav  &| grep -P "Region [a-z]|call count"
 Region detect_button, Group 1: FLOPS_SP
-|     call count    |        143 |
+|     call count    |      14299 |
 Region get_near_score, Group 1: FLOPS_SP
-|     call count    |       1573 |
+|     call count    |     157289 |
 ```
+
+If we inline them, it should improve the speed a bit. We are using each of them only at one place in the code, the binary size will not be impacted... I just added `inline` at the start of the definition in `decoder.c`.
+
+The result is a bit suprising, it's a bit strange, we get 10ms less time but the perf is lower...
+```
+|       SP [MFLOP/s]      |   931.2637 |
+|    Memory bandwidth [MBytes/s]    |  1295.9448 |
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
+  Time (mean ± σ):      1.467 s ±  0.023 s    [User: 1.249 s, System: 0.211 s]
+  Range (min … max):    1.443 s …  1.490 s    6 runs
+```
+I tried to see the function references via `objdump` before this step and couldn't find them, I guess the `-O2` is already inlining them... So I don't know why it changed a bit...
+
+## Step 5 - Improving detect_button - not implemented
+Currently `detect_button` seems to be function that is spending most of the total time, like +90%, so we should focus on it.
+```
+Region dtmf_decode, Group 1: FLOPS_SP
+|   Runtime (RDTSC) [s]   |    51.0406 |
+
+Region detect_button, Group 1: FLOPS_SP
+| RDTSC Runtime [s] |  46.927650 |
+
+Region get_near_score, Group 1: FLOPS_SP
+|   Runtime (RDTSC) [s]   |     1.2884 |
+```
+
+## Step 6 - Improving get_near_score - not implemented
+
+Instead of comparing each `TONE_SAMPLES_COUNT` (8820) float values, I could compare 1/2 or 1/4 of them, it would avoid be probably enough to get a score but would easily reduce calculations.
+```c
+    for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
+        sum += fabs(audio_chunk[i] - reference_tone[i]);
+    }
+    return sum / TONE_SAMPLES_COUNT;
+```
+The change would look like this...
+```c
+    for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i += 4) {
+        sum += fabs(audio_chunk[i] - reference_tone[i]);
+    }
+    return sum / (TONE_SAMPLES_COUNT / 4);
+```
+
+I should also create a constant `TONE_SAMPLES_COUNT_CUT` to make sure the generated code doesn't include this calculation `(TONE_SAMPLES_COUNT / 4)`.
+```c
+    return sum / TONE_SAMPLES_COUNT_CUT;
+```
+
+Not benchmarked.
 
 ## Table to analyse the progress
 | Step | Time (s) | Mem bandwidth MBytes/s | Perf MFlops/s | Operationnal Intensity |
@@ -352,12 +399,5 @@ Region get_near_score, Group 1: FLOPS_SP
 |1 Start | 3.102 | 665.5020 | 425.9479  | 0.64004 |
 |2 Removing debug logs | 3.100 | 664.4730 |  435.4236| 0.655292 |
 |3 Let the compiler optimize things for us | 1.474  | 1322.7472 |  950.2850 |  0.718418|
-|4  |  |  |  |  |
-
-
-
-## Note pour la suite
-attention à bien adapter le roofline en fonction du programme qu'on va faire et aux flags d'optimisations.
-attention à bien être en -O0 pour le début pour être sûr que il n'y a pas des trucs optimisations liés à avx ou sse qui s'activent
-si on utilise que des float -> faire du single precision `sp` !
+|4 Inlining the most used functions | 1.467 |  1295.9448|  931.2637 | 0.718598 |
 
