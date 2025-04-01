@@ -2,9 +2,9 @@ add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
 
 -- Global settings for all targets
-add_requires("libsndfile", "fftw")
+add_requires("libsndfile", "fftw", "libogg")
 add_files("audio.c", "encoder.c", "decoder.c", "file.c", "fft.c")
-add_packages("libsndfile", "fftw")
+add_packages("libsndfile", "fftw", "libogg")
 set_policy("check.target_package_licenses", false)
 
 -- Necessary for likwid
