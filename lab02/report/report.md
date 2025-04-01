@@ -302,12 +302,46 @@ The Operationnal Intensity has improved a bit: 0.655292, the flops counter has i
 
 We can change `-O0 -g -fno-inline` to `-O2` to enable the second group of optimisations, and disable the `-g` that includes debug symbols, and remove the ask to avoid inlining.
 
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+|       SP [MFLOP/s]      |   948.2652 |
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep 'Memory bandwidth'
+|    Memory bandwidth [MBytes/s]    |  1296.6734 |
+> taskset -c 2 hyperfine -M 6 './build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
+  Time (mean ± σ):      1.475 s ±  0.025 s    [User: 1.256 s, System: 0.212 s]
+  Range (min … max):    1.451 s …  1.508 s    6 runs
+```
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+|       SP [MFLOP/s]      |   920.4529 |
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep 'Memory bandwidth'
+|    Memory bandwidth [MBytes/s]    |  1324.2450 |
+> taskset -c 2 hyperfine -M 6 './build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
+  Time (mean ± σ):      1.472 s ±  0.021 s    [User: 1.253 s, System: 0.213 s]
+  Range (min … max):    1.451 s …  1.495 s    6 runs
+```
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+|       SP [MFLOP/s]      |   950.2850 |
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep 'Memory bandwidth'
+|    Memory bandwidth [MBytes/s]    |  1322.7472 |
+> taskset -c 2 hyperfine -M 6 './build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
+  Time (mean ± σ):      1.474 s ±  0.030 s    [User: 1.252 s, System: 0.216 s]
+  Range (min … max):    1.453 s …  1.526 s    6 runs
+```
+
+I'm a bit suprised, this is making around +-50 Mflops/s at each execution... but anyway I'll take the best one.
+We have a big improvement with Operationnal Intensity of `0.731306`. We can a big jump in bandwidth (+600) and perf (+500), the time got cut in half (1.4 instead of 3.1).
+
 ## Table to analyse the progress
 | Step | Time (s) | Mem bandwidth MBytes/s | Perf MFlops/s | Operationnal Intensity |
 | --------------- | --------------- | --------------- | --------------- | --------------- |
 |1 Start | 3.102 | 665.5020 | 425.9479  | 0.64004 |
-|2  | 3.100 | 664.4730 |  435.4236| 0.655292 |
-|3  |  |  |  |  |
+|2  Removing debug logs | 3.100 | 664.4730 |  435.4236| 0.655292 |
+|3   Let the compiler optimize things for us | 1.475  | 1296.6734 |  948.2652|  0.731306|
 |4  |  |  |  |  |
 
 
