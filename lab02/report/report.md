@@ -393,6 +393,12 @@ I should also create a constant `TONE_SAMPLES_COUNT_CUT` to make sure the genera
 
 Not benchmarked.
 
+## Step 7 - Use more statistics from likwid-perfctr - not implemented
+I only scratched the surface of the useful statistics.
+
+## Step 8 - Use more common optimisations - not implemented
+Like loop unrolling and constant propagation. 
+
 ## Table to analyse the progress
 | Step | Time (s) | Mem bandwidth MBytes/s | Perf MFlops/s | Operationnal Intensity |
 | --------------- | --------------- | --------------- | --------------- | --------------- |
@@ -400,4 +406,7 @@ Not benchmarked.
 |2 Removing debug logs | 3.100 | 664.4730 |  435.4236| 0.655292 |
 |3 Let the compiler optimize things for us | 1.474  | 1322.7472 |  950.2850 |  0.718418|
 |4 Inlining the most used functions | 1.467 |  1295.9448|  931.2637 | 0.718598 |
+|**FINAL IMPROVEMENT** | x2.11 | x1.9 |  x2.1 | x1.1 |
+
+**We improved around 2.11 times the duration, and there is a lot of room for much more improvement...**
 
