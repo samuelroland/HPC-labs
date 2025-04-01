@@ -20,7 +20,7 @@
 
 #define BTN_NOT_FOUND 100
 
-float get_near_score(const float *audio_chunk, float *reference_tone) {
+inline float get_near_score(const float *audio_chunk, float *reference_tone) {
 
     LIKWID_MARKER_START("get_near_score");
     double sum = 0;
@@ -33,7 +33,7 @@ float get_near_score(const float *audio_chunk, float *reference_tone) {
 }
 
 // Calculate the average of scores to detect outliers
-uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
+inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
     LIKWID_MARKER_START("detect_button");
 #if DECODER_VARIANT == 1
