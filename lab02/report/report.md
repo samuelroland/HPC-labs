@@ -19,11 +19,11 @@ cmake . -Bbuild && cmake --build build/ -j 8
 
 And run the buffers variant
 ```sh
-./build/dtmf_encdec-buffers decode trivial-alphabet.wav
+./build/dtmf_encdec_buffers decode trivial-alphabet.wav
 ```
 Or run the fft variant
 ```sh
-./build/dtmf_encdec-fft decode trivial-alphabet.wav
+./build/dtmf_encdec_fft decode trivial-alphabet.wav
 ```
 
 ### Via Xmake
@@ -43,15 +43,15 @@ xmake
 
 And run the buffers variant
 ```sh
-xmake run dtmf_encdec-buffers decode trivial-alphabet.wav
+xmake run dtmf_encdec_buffers decode trivial-alphabet.wav
 # or directly
-./build/linux/x86_64/release/dtmf_encdec-buffers decode trivial-alphabet.wav
+./build/linux/x86_64/release/dtmf_encdec_buffers decode trivial-alphabet.wav
 ```
 Or run the fft variant
 ```sh
-xmake run dtmf_encdec-fft decode trivial-alphabet.wav
+xmake run dtmf_encdec_fft decode trivial-alphabet.wav
 # or directly
-./build/linux/x86_64/release/dtmf_encdec-fft decode trivial-alphabet.wav
+./build/linux/x86_64/release/dtmf_encdec_fft decode trivial-alphabet.wav
 ```
 
 ## My machine
@@ -156,8 +156,8 @@ My machine has one physical socket, and I'm going to take domain 0 as recommende
 I'm using the `txt/base.txt` which contains the supported alphabet once and `txt/verylong.txt` file which contains 100 times the same string. Encoding the 2 files:
 
 ```sh
-xmake run dtmf_encdec-fft encode $PWD/txt/verylong.txt $PWD/verylong.wav
-xmake run dtmf_encdec-fft encode $PWD/txt/base.txt $PWD/base.wav
+xmake run dtmf_encdec_fft encode $PWD/txt/verylong.txt $PWD/verylong.wav
+xmake run dtmf_encdec_fft encode $PWD/txt/base.txt $PWD/base.wav
 ```
 
 ## Roofline
@@ -166,9 +166,9 @@ I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-H
 Before starting the maxperf and maxband search I tried to measure the peak memory used. I learned via [Stackoverflow](https://stackoverflow.com/questions/774556/peak-memory-usage-of-a-linux-unix-process) that `time -v` can be used to get this information.
 
 ```sh
-> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/base.wav &| grep "Maximum resident set size"
+> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec_buffers decode $PWD/base.wav &| grep "Maximum resident set size"
 	Maximum resident set size (kbytes): 27672
-> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "Maximum resident set size"
+> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec_buffers decode $PWD/verylong.wav &| grep "Maximum resident set size"
 	Maximum resident set size (kbytes): 569112
 ```
 I know that my program is going way beyond the CPU cache available (27MB and 569MB are > 13Mb), so my roofline maxband is going to be tested on RAM access, not just CPU caches.
@@ -176,9 +176,9 @@ I know that my program is going way beyond the CPU cache available (27MB and 569
 I chose to take my `buffers` decoder for this analysis, because it is faster than my `fft` decoder.
 
 ```
-> time taskset -c 2 ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav > /dev/null
+> time taskset -c 2 ./build/linux/x86_64/release/dtmf_encdec_buffers decode $PWD/verylong.wav > /dev/null
 Executed in    3.12 secs
-> time taskset -c 2 ./build/linux/x86_64/release/dtmf_encdec-fft decode $PWD/verylong.wav > /dev/null
+> time taskset -c 2 ./build/linux/x86_64/release/dtmf_encdec_fft decode $PWD/verylong.wav > /dev/null
 Executed in    8.84 secs
 ```
 
@@ -246,12 +246,12 @@ MEM	Memory bandwidth in MBytes/s
 ```
 
 ```sh
-> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
 |       SP [MFLOP/s]      |   425.9479 |
-> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep 'Memory bandwidth'
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep 'Memory bandwidth'
 |    Memory bandwidth [MBytes/s]    |   665.5020 |
-> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav'
-Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav
+> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
   Time (mean ± σ):      3.102 s ±  0.089 s    [User: 2.876 s, System: 0.212 s]
   Range (min … max):    3.012 s …  3.189 s    3 runs
 ```
@@ -286,12 +286,12 @@ I used a macro LOG that only does something when the `LOGGING` macro is defined,
 Then I replaced any `printf()` occurence by `LOG()` call in `decoder.c`
 
 ```sh
-> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
 |       SP [MFLOP/s]      |   435.4236 |
-> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep 'Memory bandwidth'
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav &| grep 'Memory bandwidth'
 |    Memory bandwidth [MBytes/s]    |   664.4730 |
-> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav'
-Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav
+> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec_buffers decode verylong.wav
   Time (mean ± σ):      3.100 s ±  0.101 s    [User: 2.867 s, System: 0.221 s]
   Range (min … max):    3.035 s …  3.217 s    3 runs
 ```

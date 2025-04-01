@@ -19,10 +19,10 @@ add_cflags("-O2")
 target("sandbox")
 add_files("sandbox.c")
 
-target("dtmf_encdec-buffers")
+target("dtmf_encdec_buffers")
 add_defines("DECODER_VARIANT=1")
 add_files("main.c")
 
-target("dtmf_encdec-fft")
+target("dtmf_encdec_fft")
 add_defines("DECODER_VARIANT=2")
 add_files("main.c")
