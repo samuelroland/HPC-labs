@@ -55,7 +55,7 @@ xmake run dtmf_encdec-fft decode trivial-alphabet.wav
 ```
 
 ## My machine
-I'm working on my tour at home, because my laptop is not supported by likwid because Intel 12th Gen is not supported currently.
+I'm working on my tour at home, because my laptop is not supported by likwid because Intel 12th Gen is not supported currently. I asked about news for this support in their issues tracker on issue [Support for Intel Alder Lake 12th gen processors #468](https://github.com/RRZE-HPC/likwid/issues/468#issuecomment-2767312383).
 
 Extract from `fastfetch`
 ```
@@ -70,7 +70,7 @@ Swap: 8.00 GiB
 Disk: 236.87 GiB - btrfs
 ```
 
-![lstopo-sx](./imgs/lstopo-sx.png)
+![lstopo-sx](./imgs/lstopo-sx.svg)
 
 ```
 > likwid-topology 
@@ -129,8 +129,10 @@ Total memory:		15689.5 MB
 --------------------------------------------------------------------------------
 ```
 
-## Roofline
-I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model) 
+To sum up, CPU cache sizes for core 2
+- L1: 32KB
+- L2: 256KB
+- L3: 12MB
 
 ```
 > likwid-bench -p
@@ -149,12 +151,27 @@ Domain 4:
 
 My machine has one physical socket, and I'm going to take domain 0 as recommended by the teacher, so with tag `N`.
 
-Before starting the maxperf and maxband search I tried to know how much memory is eating
+## Preparation
 
-I know that my program is using more memory than what's available
+I'm using the `txt/base.txt` which contains the supported alphabet once and `txt/verylong.txt` file which contains 100 times the same string. Encoding the 2 files:
+
 ```sh
-/usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/short.wav
+xmake run dtmf_encdec-fft encode $PWD/txt/verylong.txt $PWD/verylong.wav
+xmake run dtmf_encdec-fft encode $PWD/txt/base.txt $PWD/base.wav
 ```
+
+## Roofline
+I'm following the [Tutorial: Empirical Roofline Model](https://github.com/RRZE-HPC/likwid/wiki/Tutorial%3A-Empirical-Roofline-Model) 
+
+Before starting the maxperf and maxband search I tried to measure the peak memory used. I learned via [Stackoverflow](https://stackoverflow.com/questions/774556/peak-memory-usage-of-a-linux-unix-process) that `time -v` can be used to get this information.
+
+```sh
+> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/base.wav &| grep "Maximum resident set size"
+	Maximum resident set size (kbytes): 27672
+> /usr/bin/time -v ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "Maximum resident set size"
+	Maximum resident set size (kbytes): 569112
+```
+I know that my program is going way beyond the CPU cache available, so my roofline is going to be adapted to this situation.
 
 ### Searching for maxperf
 We want to skip the first 0 and 1 hardware cores used by the OS, so we pin the program on the core number 2 with `taskset -c 2`, my program is single-threaded. We run the peakflops_sp (single precision because my code only use `float` and no `double`). Using 32KB because this is the L1 data cache size, we don't want to go further because we don't want our measures to be influenced by cache misses as we are not calculating the memory bandwidth here. We want to use only 1 thread in the benchmark with `:1`
