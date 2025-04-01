@@ -328,6 +328,24 @@ I'm a bit suprised, this is making around +-50 Mflops/s at each execution... but
 
 ## Step 4 - Inlining the most used functions
 
+I added a few markers for each function in `decoder.c`, showing the start markers here via `rg`.
+```
+25:    LIKWID_MARKER_START("get_near_score");
+38:    LIKWID_MARKER_START("detect_button");
+130:    LIKWID_MARKER_START("dtmf_decode");
+```
+
+When adding `-m` flag we can enable the statistics for each marker. Looking at line `call count`, we can see that `the`
+```sh
+> likwid-perfctr -C 2 -g FLOPS_SP -m ./build/linux/x86_64/release/dtmf_encdec_buffers decode base.wav  &| grep -P "Region [a-z]|call count"
+Region decode_while_loop, Group 1: FLOPS_SP
+|     call count    |          1 |
+Region detect_button, Group 1: FLOPS_SP
+|     call count    |        143 |
+Region get_near_score, Group 1: FLOPS_SP
+|     call count    |       1573 |
+```
+
 ## Table to analyse the progress
 | Step | Time (s) | Mem bandwidth MBytes/s | Perf MFlops/s | Operationnal Intensity |
 | --------------- | --------------- | --------------- | --------------- | --------------- |

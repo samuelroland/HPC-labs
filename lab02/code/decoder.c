@@ -109,6 +109,9 @@ uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 }
 
 int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, char **result_text) {
+    LIKWID_MARKER_INIT;
+
+    LIKWID_MARKER_START("dtmf_decode");
     float **freqs_buffers = generate_all_frequencies_buffers();
     // having only 1 tone letter would produce the maximum of letter count + 2 (ceil + \0)
     long maximum_text_buffer_size = samples_count / (TONE_SAMPLES_COUNT + SILENCE_SAMPLES_COUNT) + 2;
@@ -125,9 +128,6 @@ int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, ch
     bool searching_next_tone = false;//we didn't find the first tone at the very first
     uint8_t current_btn = BTN_NOT_FOUND;
 
-    LIKWID_MARKER_INIT;
-
-    LIKWID_MARKER_START("decode_while_loop");
     // We progress by trying with SHORT_BREAK_SAMPLES_COUNT step, if we don't find a another tone for the same letter
     // we know we reached the end of a letter, so we can skip SILENCE_SAMPLES_COUNT - SHORT_BREAK_SAMPLES_COUNT
     // and except if we reached the end, we are sure to find a tone.
