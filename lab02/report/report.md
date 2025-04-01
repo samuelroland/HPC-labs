@@ -233,7 +233,7 @@ Combining the maxperf = **9050 MFlops/s** and the maxband = **18600 MByte/s** gi
 ![roofline base](./imgs/roofline-base.png)
 
 ## Profiling my code
-Currently my code is compiled with GCC flags: `-O0 -g -fno-inline`
+Currently my code is compiled with GCC flags: `-O0 -g -fno-inline`.
 
 There are different groups of counters that can be used, depending on the architecture and what likwid is supporting. The most useful for us is the `FLOPS_SP` and `MEM`. We can use them with `-g`. There is also the possibility to pin the program to a given physical thread with `-C 2`, as that's shorter than `taskset -c 2`, I'm using this option here.
 ```sh
@@ -246,24 +246,23 @@ MEM	Memory bandwidth in MBytes/s
 ```
 
 ```sh
-> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "Memory bandwidth"
-|    Memory bandwidth [MBytes/s]    |   647.8238 |
+> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep '  SP \[MFLOP/s\]'
+|       SP [MFLOP/s]      |   425.9479 |
+> likwid-perfctr -C 2 -g MEM ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav &| grep 'Memory bandwidth'
+|    Memory bandwidth [MBytes/s]    |   665.5020 |
+> taskset -c 2 hyperfine -M 3 './build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav'
+Benchmark 1: ./build/linux/x86_64/release/dtmf_encdec-buffers decode verylong.wav
+  Time (mean ± σ):      3.102 s ±  0.089 s    [User: 2.876 s, System: 0.212 s]
+  Range (min … max):    3.012 s …  3.189 s    3 runs
 ```
 
-```sh
-> likwid-perfctr -C 2 -g FLOPS_SP ./build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav &| grep "  SP \[MFLOP/s\]"
-|       SP [MFLOP/s]      |   458.0617 |
-```
+We can now put a baseline **425.9479 MFlops/s** and **665.5020 MBytes/s** on the roofline, the time is `3.1s`. The operationnal intensity is `425.9479 / 665.5020 = 0.64004`.
 
-And finally the time measure
-```sh
-> taskset -c 2 hyperfine  "$PWD/build/linux/x86_64/release/dtmf_encdec-buffers decode $PWD/verylong.wav"
-Benchmark 1: /home/sam/HPC/HPC-labs/lab02/code/build/linux/x86_64/release/dtmf_encdec-buffers decode /home/sam/HPC/HPC-labs/lab02/code/verylong.wav
-  Time (mean ± σ):      3.100 s ±  0.075 s    [User: 2.870 s, System: 0.216 s]
-  Range (min … max):    3.015 s …  3.204 s    10 runs
-```
+![roofline baseline](./imgs/roofline-baseline.png)
 
 ## Starting code optimisations
+
+Table to analyse the progress
 
 Currently decoding `verylong.wav` prints `18307` lines for debugging... maybe this is taking a bit of time to compute these logs and send them.
 
