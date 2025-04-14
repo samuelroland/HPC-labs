@@ -45,7 +45,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 
         // Calculate total weight (sum of distances)
         for (int j = 0; j < image->width * image->height; ++j) {
-            total_weight += distances[i];
+            total_weight += distances[j];
         }
 
         float r = ((float) rand() / (float) RAND_MAX) * total_weight;
