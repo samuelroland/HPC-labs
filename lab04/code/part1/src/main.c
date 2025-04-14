@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     struct img_t *img;
     int nb_cluster = 0;
     printf("%d\n", argc);
@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
     }
 
     nb_cluster = atoi(argv[2]);
-    if (nb_cluster <= 0){
+    if (nb_cluster <= 0) {
         printf("The number of clusters should be greater than 0\n");
         return 1;
     }
