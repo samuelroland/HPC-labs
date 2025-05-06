@@ -92,7 +92,15 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Ce qui nous amène à **132.7 ms** !
 
-## SIMD sur distance()
+## The refactor
+
+J'ai simplifié le calcul des distances à dist = abs(p1[]) TODO
+
+On peut maintenant stocker des `u_int16_t` au lieu de `float` ou `unsigned` pour les distances, comme on a au max `3*255 < 2^16`.
+
+```c
+u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
+```
 
 ## Résumé des optimisations
 | Titre | Temps |
