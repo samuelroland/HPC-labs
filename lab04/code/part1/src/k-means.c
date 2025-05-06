@@ -7,14 +7,14 @@
 
 // This function will calculate the SQUARED euclidean distance between two pixels.
 // Instead of using coordinates, we use the RGB value for evaluating distance.
-float distance(uint8_t *p1, uint8_t *p2) {
+unsigned distance(uint8_t *p1, uint8_t *p2) {
     // __m64 r1, r2;
     // _mm_load(p1);
     // todo simd with vector of uint8_t
     // see https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#avxnewtechs=AVX2&ig_expand=13,22
-    float r_diff = p1[0] - p2[0];
-    float g_diff = p1[1] - p2[1];
-    float b_diff = p1[2] - p2[2];
+    unsigned r_diff = p1[0] - p2[0];
+    unsigned g_diff = p1[1] - p2[1];
+    unsigned b_diff = p1[2] - p2[2];
     return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
 }
 
@@ -30,7 +30,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
     centers[G_OFFSET] = image->data[first_center + G_OFFSET];
     centers[B_OFFSET] = image->data[first_center + B_OFFSET];
 
-    float *distances = (float *) malloc(surface * sizeof(float));
+    unsigned *distances = (unsigned *) malloc(surface * sizeof(unsigned));
 
     // Calculate distances from each pixel to the first center
     for (int i = 0; i < surface; ++i) {
@@ -41,14 +41,14 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
     int iTimesComponents = 0;// will be = i * image->components;
     for (int i = 1; i < num_clusters; ++i) {
         iTimesComponents += image->components;
-        float total_weight = 0.0;
+        unsigned total_weight = 0;
 
         // Calculate total weight (sum of distances)
         for (int j = 0; j < surface; ++j) {
             total_weight += distances[j];
         }
 
-        float r = ((float) rand() / (float) RAND_MAX) * total_weight;
+        unsigned r = ((float) rand() / (float) RAND_MAX) * total_weight;
         int index = 0;
 
         // Choose the next center based on weighted probability
@@ -65,7 +65,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 
         // Update distances based on the new center
         for (int j = 0; j < surface; j++) {
-            float dist = distance(image->data + j * image->components, centers + iTimesComponents);
+            unsigned dist = distance(image->data + j * image->components, centers + iTimesComponents);
 
             if (dist < distances[j]) {
                 distances[j] = dist;
@@ -80,7 +80,6 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 // It takes as input the image, its dimensions (width and height), and the number of clusters to find.
 void kmeans(struct img_t *image, int num_clusters) {
     const int surface = image->width * image->height;
-    const int sizeOfComponents = image->components * sizeof(uint8_t);
 
     uint8_t *centers = calloc(num_clusters * image->components, sizeof(uint8_t));
 
@@ -91,11 +90,11 @@ void kmeans(struct img_t *image, int num_clusters) {
 
     // Assign each pixel in the image to its nearest cluster.
     for (int i = 0; i < surface; ++i) {
-        float min_dist = INFINITY;
+        unsigned min_dist = INFINITY;
         int best_cluster = -1;
 
         for (int c = 0; c < num_clusters; c++) {
-            float dist = distance(image->data + i * image->components, centers + c * image->components);
+            unsigned dist = distance(image->data + i * image->components, centers + c * image->components);
 
             if (dist < min_dist) {
                 min_dist = dist;

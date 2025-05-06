@@ -8,6 +8,6 @@ typedef struct {
 } ClusterData;
 
 
-float distance(uint8_t *p1, uint8_t *p2);
+unsigned distance(uint8_t *p1, uint8_t *p2);
 void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers);
 void kmeans(struct img_t *image, int num_clusters);

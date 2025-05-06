@@ -74,7 +74,23 @@ float distance(uint8_t *p1, uint8_t *p2) {
     return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
 }
 ```
+Pour s'en convaincre, on peut dumper les float et voir qu'il ne sont jamais très souvent déjà entier ou que leur arrondi ne fera pas grande différence.
+```c
+total_weight = 248323856.000000 and r = 178121952.000000
+total_weight = 228217328.000000 and r = 32316158.000000
+total_weight = 211624336.000000 and r = 128449384.000000
+total_weight = 210208560.000000 and r = 3426519.750000
+total_weight = 199563056.000000 and r = 48471224.000000
+```
 Je pense qu'on aura pas d'overflow avec des `unsigned int` car `255^2 * 3 = 195075 < INT_MAX = 4294967296`
+
+```
+Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.nwC7VQYzOW
+  Time (mean ± σ):     132.7 ms ±   0.6 ms    [User: 129.9 ms, System: 2.3 ms]
+  Range (min … max):   131.9 ms … 133.4 ms    4 runs
+```
+
+Ce qui nous amène à **132.7 ms** !
 
 ## SIMD sur distance()
 
