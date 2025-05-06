@@ -7,7 +7,7 @@
 
 // This function will calculate the SQUARED euclidean distance between two pixels.
 // Instead of using coordinates, we use the RGB value for evaluating distance.
-inline float distance(uint8_t *p1, uint8_t *p2) {
+float distance(uint8_t *p1, uint8_t *p2) {
     // __m64 r1, r2;
     // _mm_load(p1);
     // todo simd with vector of uint8_t
@@ -26,25 +26,16 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
     int first_center = (rand() % surface) * image->components;
 
     // Set the RGB values of the first center
-    centers[0 + R_OFFSET] = image->data[first_center + R_OFFSET];
-    centers[0 + G_OFFSET] = image->data[first_center + G_OFFSET];
-    centers[0 + B_OFFSET] = image->data[first_center + B_OFFSET];
+    centers[R_OFFSET] = image->data[first_center + R_OFFSET];
+    centers[G_OFFSET] = image->data[first_center + G_OFFSET];
+    centers[B_OFFSET] = image->data[first_center + B_OFFSET];
 
     float *distances = (float *) malloc(surface * sizeof(float));
 
     // Calculate distances from each pixel to the first center
-    uint8_t *dest = malloc(sizeOfComponents);
-    memcpy(dest, centers, sizeOfComponents);
-
     for (int i = 0; i < surface; ++i) {
-        uint8_t *src = malloc(sizeOfComponents);
-        memcpy(src, image->data + i * image->components, sizeOfComponents);
-
-        distances[i] = distance(src, dest);
-
-        free(src);
+        distances[i] = distance(image->data + i * image->components, centers);
     }
-    free(dest);
 
     // Loop to find remaining cluster centers
     int iTimesComponents = 0;// will be = i * image->components;
@@ -73,23 +64,13 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         centers[iTimesComponents + B_OFFSET] = image->data[indexTimesComponents + B_OFFSET];
 
         // Update distances based on the new center
-        uint8_t *new_center = malloc(sizeOfComponents);
-        memcpy(new_center, centers + iTimesComponents, sizeOfComponents);
-
         for (int j = 0; j < surface; j++) {
-            uint8_t *src = malloc(sizeOfComponents);
-            memcpy(src, image->data + j * image->components, sizeOfComponents);
-
-            float dist = distance(src, new_center);
+            float dist = distance(image->data + j * image->components, centers + iTimesComponents);
 
             if (dist < distances[j]) {
                 distances[j] = dist;
             }
-
-            free(src);
         }
-
-        free(new_center);
     }
 
     free(distances);
@@ -113,14 +94,8 @@ void kmeans(struct img_t *image, int num_clusters) {
         float min_dist = INFINITY;
         int best_cluster = -1;
 
-        uint8_t *src = malloc(sizeOfComponents);
-        memcpy(src, image->data + i * image->components, sizeOfComponents);
-
         for (int c = 0; c < num_clusters; c++) {
-            uint8_t *dest = malloc(sizeOfComponents);
-            memcpy(dest, centers + c * image->components, sizeOfComponents);
-
-            float dist = distance(src, dest);
+            float dist = distance(image->data + i * image->components, centers + c * image->components);
 
             if (dist < min_dist) {
                 min_dist = dist;
