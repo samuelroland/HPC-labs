@@ -32,11 +32,56 @@ const int sizeOfComponents = image->components * sizeof(uint8_t);
 for (int i = 0; i < surface; ++i) {
 ```
 
+## Allocations inutiles
+
+On a souvent des cas avec des `malloc` inutiles, comme ici on fait une copie des pixels avant de les envoyer à `distance()` qui ne fait pas de modifications donc la copie est complètement inutile.
+```c
+    // Calculate distances from each pixel to the first center
+    uint8_t *dest = malloc(sizeOfComponents);
+    memcpy(dest, centers, sizeOfComponents);
+
+    for (int i = 0; i < surface; ++i) {
+        uint8_t *src = malloc(sizeOfComponents);
+        memcpy(src, image->data + i * image->components, sizeOfComponents);
+
+        distances[i] = distance(src, dest);
+```
+
+On peut ainsi simplifier comme ceci est gagner des `free` aussi
+```c
+    // Calculate distances from each pixel to the first center
+    for (int i = 0; i < surface; ++i) {
+        distances[i] = distance(image->data + i * image->components, centers);
+    }
+```
+
+```
+Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.SgMsJxhkr7
+  Time (mean ± σ):     195.9 ms ±   1.9 ms    [User: 193.2 ms, System: 2.1 ms]
+  Range (min … max):   193.6 ms … 197.5 ms    4 runs
+```
+
+Après avoir enlevé les copies inutiles à 3 endroits avant des appels à distance, on a gagne énormenent de temps. On passe de **1.625s** à **0.1959 s** !
+
+## Int au lieu de float
+
+En fait, on a pas besoin d'utiliser des float pour la plupart des tailles, ça correspond à des entiers. Les calculs pourraient être accélérés
+```c
+float distance(uint8_t *p1, uint8_t *p2) {
+    float r_diff = p1[0] - p2[0];
+    float g_diff = p1[1] - p2[1];
+    float b_diff = p1[2] - p2[2];
+    return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
+}
+```
+Je pense qu'on aura pas d'overflow avec des `unsigned int` car `255^2 * 3 = 195075 < INT_MAX = 4294967296`
+
 ## SIMD sur distance()
 
 ## Résumé des optimisations
 | Titre | Temps |
 | ------|------- |
-| Départ | 1.631 |
-| Optimisations basiques | 1.625 |
+| Départ | 1.631s|
+| Optimisations basiques | 1.625s|
+| Allocations inutiles | 195.9ms |
 
