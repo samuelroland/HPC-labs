@@ -11,13 +11,26 @@ end
 
 # Run tests
 
+
 mkdir -p tests/gen
 cmake . -Bbuild && cmake --build build/ -j 8 || return
 clear
 
+if [ "$argv[1]" = regen ]
+    rm -rf tests/base
+    mkdir -p tests/base
+    for k in (seq 1 100; echo 200)
+        set base tests/base/$k.png
+        echo generating $k.png
+        ./build/segmentation ../img/sample_640_2.png $k $base >/dev/null
+    end
+    return
+end
+
 set kernels 4 5 6 7 8 9 10 20 50 100
-set kernels 4 100
-set bench_kernels 100
+set kernels 50 200
+# set bench_kernels 4 50 100 1000
+set bench_kernels 200
 for k in $kernels
     set base tests/base/$k.png
     set out tests/gen/$k.png
@@ -28,12 +41,12 @@ for k in $kernels
     else
         echo -n ""
         color red FAIL
-        echo stopped...
-        return
+        # echo stopped...
+        # return
     end
 end
 
 for k in $bench_kernels
     set tmp (mktemp)
-    hyperfine -r 4 "taskset -c 2 ./build/segmentation ../img/sample_640_2.png $k $tmp"
+    hyperfine --warmup 1 -r 4 "taskset -c 2 ./build/segmentation ../img/sample_640_2.png $k $tmp"
 end
