@@ -95,6 +95,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         // First dists_lo is at byte 32, then 96, ...
         u_int8_t *ptri = ((u_int8_t *) distances) + 2 * i;
         u_int8_t *ptrj = ((u_int8_t *) distances) + 2 * i + 32;
+        // printf("surface %d (%x->%x). hi store at byte index %d plage (%x->%x), low store at byte index %d plage (%x->%x) \n", surface, distances, distances + surface, 2 * i, ptri, ptri + incr, 2 * i + incr, ptrj, ptrj + incr);
         _mm256_storeu_si256((__m256i *) ptri, dists_hi);
         _mm256_storeu_si256((__m256i *) ptrj, dists_lo);
     }

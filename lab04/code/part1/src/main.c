@@ -21,6 +21,8 @@ int main(int argc, char **argv) {
 
     printf("Image loaded!\n");
 
+    printf("Nb of components in this image %d\n", img->components);
+
     kmeans(img, nb_cluster);
 
     save_image(argv[3], img);
