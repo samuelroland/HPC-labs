@@ -167,7 +167,7 @@ void kmeans(struct img_t *image, int num_clusters) {
     for (int i = 0; i < surface; ++i) {
         unsigned min_dist = UINT_MAX;
         int best_cluster = -1;
-        int assigned_to = -1;
+        int assigned_to;
 
         for (int c = 0; c < num_clusters; c++) {
             unsigned dist = distance(image->data + i * image->components, centers + c * image->components);
@@ -179,8 +179,7 @@ void kmeans(struct img_t *image, int num_clusters) {
 
             assigned_to = best_cluster;
         }
-        if (assigned_to != -1)
-            assignments[i] = assigned_to;
+        assignments[i] = assigned_to;// if num_clusters > 0 as checked in the main, this assigned_to will be initialized ! we can ignore the warning.
     }
 
     ClusterData *cluster_data = (ClusterData *) calloc(num_clusters, sizeof(ClusterData));
