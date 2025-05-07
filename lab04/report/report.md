@@ -92,6 +92,13 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Ce qui nous amène à **132.7 ms** !
 
+
+
+// stb_image uses ints pervasively, including for offset calculations.
+// therefore the largest decoded image size we can support with the
+// current code, even on 64-bit targets, is INT_MAX. this is not a
+// significant limitation for the intended use case.
+
 ## The refactor
 
 J'ai simplifié le calcul des distances à dist = abs(p1[]) TODO
