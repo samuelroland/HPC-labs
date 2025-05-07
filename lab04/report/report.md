@@ -160,5 +160,5 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png
 ```
 
 ## Partie 2 - propre algorithme de traitement d'image
-Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Je me suis dit que ça pouvait être sympa et bizarre à la fois donc j'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
+Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. Je me suis dit que ça pouvait être sympa et bizarre à la fois donc j'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
