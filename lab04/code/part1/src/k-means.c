@@ -1,22 +1,21 @@
 #include "k-means.h"
+#include "immintrin.h"
 #include <assert.h>
-#include <immintrin.h>
-#include <math.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 
 // This function will calculate the SQUARED euclidean distance between two pixels.
 // Instead of using coordinates, we use the RGB value for evaluating distance.
-// unsigned distance(uint8_t *p1, uint8_t *p2) {
-//     // No SIMD here, because the cost of setup is too high...
-//     unsigned r_diff = p1[0] - p2[0];
-//     unsigned g_diff = p1[1] - p2[1];
-//     unsigned b_diff = p1[2] - p2[2];
-//     return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
-// }
+unsigned distance(uint8_t *p1, uint8_t *p2) {
+    // No SIMD here, because the cost of setup is too high...
+    unsigned r_diff = abs(p1[0] - p2[0]);
+    unsigned g_diff = abs(p1[1] - p2[1]);
+    unsigned b_diff = abs(p1[2] - p2[2]);
+    return r_diff + g_diff + b_diff;
+}
 
 // Function to initialize cluster centers using the k-means++ algorithm
 void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
@@ -50,7 +49,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 
     // Calculate distances from each pixel to the first center
     // This is a vectorized version that try to manage 32 pixels at a time
-    uint8_t *first_center_data = image->data + first_center;
+    u_int8_t *first_center_data = image->data + first_center;
     __m256i reds, greens, blues;         // 32 times 8 bits
     __m256i center_r, center_g, center_b;// 32 times the same value of red, green and blue of the first center
     __m256i dists_lo;                    // 16 final distances values of 16bits each, for the 16 low pixels
@@ -77,24 +76,24 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         __m256i abs_diff = _mm256_subs_epu8(max_ab, min_ab);                                                                        \
         /* Make the 16 low 8 bits integers into 16 times 16 bits integers */                                                        \
         __m256i partial_abs_diff = _mm256_unpacklo_epi8(abs_diff, _mm256_setzero_si256());                                          \
-        /* Same for the 16 high 8 bits integers */                                                                                  \
         dists_lo = _mm256_add_epi8(partial_abs_diff, dists_lo);                                                                     \
+        /* Same for the 16 high 8 bits integers */                                                                                  \
         partial_abs_diff = _mm256_unpackhi_epi8(abs_diff, _mm256_setzero_si256());                                                  \
         dists_hi = _mm256_add_epi8(partial_abs_diff, dists_hi);                                                                     \
     } while (0)
 
-        reds = _mm256_loadu_epi8(data_r + i);
-        greens = _mm256_loadu_epi8(data_g + i);
-        blues = _mm256_loadu_epi8(data_b + i);
+        reds = _mm256_loadu_si256((__m256i *) (data_r + i));
+        greens = _mm256_loadu_si256((__m256i *) (data_g + i));
+        blues = _mm256_loadu_si256((__m256i *) (data_b + i));
         COMPUTE_32PIXELS_DISTANCE_ONECHANNEL(reds, center_r, dists_hi, dists_lo, distances, i, incr);
         COMPUTE_32PIXELS_DISTANCE_ONECHANNEL(greens, center_g, dists_hi, dists_lo, distances, i, incr);
         COMPUTE_32PIXELS_DISTANCE_ONECHANNEL(blues, center_b, dists_hi, dists_lo, distances, i, incr);
 
-        // Now we calculated the distances in dists_lo and dists_hi for 32 pixels for 3 channels!
-        // We just need to save it in distances buffer in memory
-        _mm256_storeu_si256((__m256i *) (distances + i * incr), dists_lo);
-        _mm256_storeu_si256((__m256i *) (distances + i * incr + incr / 2), dists_lo);
+        // We just need to save the 32 distances buffer in memory
+        _mm256_storeu_si256((__m256i *) (distances + i / 2), dists_hi);
+        _mm256_storeu_si256((__m256i *) (distances + i / 2 + i), dists_lo);
     }
+
     uint8_t cr = first_center_data[R_OFFSET];
     uint8_t cg = first_center_data[G_OFFSET];
     uint8_t cb = first_center_data[B_OFFSET];
@@ -141,6 +140,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         }
     }
 
+    free(image_as_3_pixels_arrays);
     free(distances);
 }
 
@@ -160,7 +160,7 @@ void kmeans(struct img_t *image, int num_clusters) {
 
     // Assign each pixel in the image to its nearest cluster.
     for (int i = 0; i < surface; ++i) {
-        unsigned min_dist = INFINITY;
+        unsigned min_dist = UINT_MAX;
         int best_cluster = -1;
         int assigned_to;
 
