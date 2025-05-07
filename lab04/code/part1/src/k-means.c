@@ -62,7 +62,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 
     int incr = 32;// 256 / 8 = 32
     int remaining_start = surface - (surface % incr);
-    for (int i = 0; i < surface; i += incr) {
+    for (int i = 0; i < remaining_start; i += incr) {
 
         // Compute abs(mm256onechannel_color - mm256onechannel_center) for on channel on 32 pixels
         // To avoid needing larger types than u_int8_t to store the results required by squared values,
@@ -93,8 +93,10 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         // We are storing the 16 times 16 bits = 16 times 2 bytes = 32 bytes of dists_lo then the 32 bytes of dists_hi
         // First dists_hi is at byte 0, then 64, then 128, ...
         // First dists_lo is at byte 32, then 96, ...
-        _mm256_storeu_si256((__m256i *) (((uint8_t *) distances) + 2 * i), dists_hi);
-        _mm256_storeu_si256((__m256i *) (((uint8_t *) distances) + 2 * i + incr), dists_lo);
+        u_int8_t *ptri = ((u_int8_t *) distances) + 2 * i;
+        u_int8_t *ptrj = ((u_int8_t *) distances) + 2 * i + 32;
+        _mm256_storeu_si256((__m256i *) ptri, dists_hi);
+        _mm256_storeu_si256((__m256i *) ptrj, dists_lo);
     }
 
     uint8_t cr = first_center_data[R_OFFSET];
@@ -164,7 +166,7 @@ void kmeans(struct img_t *image, int num_clusters) {
     for (int i = 0; i < surface; ++i) {
         unsigned min_dist = UINT_MAX;
         int best_cluster = -1;
-        int assigned_to;
+        int assigned_to = -1;
 
         for (int c = 0; c < num_clusters; c++) {
             unsigned dist = distance(image->data + i * image->components, centers + c * image->components);
@@ -176,7 +178,8 @@ void kmeans(struct img_t *image, int num_clusters) {
 
             assigned_to = best_cluster;
         }
-        assignments[i] = assigned_to;
+        if (assigned_to != -1)
+            assignments[i] = assigned_to;
     }
 
     ClusterData *cluster_data = (ClusterData *) calloc(num_clusters, sizeof(ClusterData));
