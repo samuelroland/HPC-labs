@@ -27,8 +27,7 @@ if [ "$argv[1]" = regen ]
     return
 end
 
-set kernels 4 5 6 7 8 9 10 20 50 100
-set kernels 50 200
+set kernels 4 8 9 10 20 50 100
 # set bench_kernels 4 50 100 1000
 set bench_kernels 200
 for k in $kernels

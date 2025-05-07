@@ -90,8 +90,11 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
         COMPUTE_32PIXELS_DISTANCE_ONECHANNEL(blues, center_b, dists_hi, dists_lo, distances, i, incr);
 
         // We just need to save the 32 distances buffer in memory
-        _mm256_storeu_si256((__m256i *) (distances + i / 2), dists_hi);
-        _mm256_storeu_si256((__m256i *) (distances + i / 2 + i), dists_lo);
+        // We are storing the 16 times 16 bits = 16 times 2 bytes = 32 bytes of dists_lo then the 32 bytes of dists_hi
+        // First dists_hi is at byte 0, then 64, then 128, ...
+        // First dists_lo is at byte 32, then 96, ...
+        _mm256_storeu_si256((__m256i *) (((uint8_t *) distances) + 2 * i), dists_hi);
+        _mm256_storeu_si256((__m256i *) (((uint8_t *) distances) + 2 * i + incr), dists_lo);
     }
 
     uint8_t cr = first_center_data[R_OFFSET];
@@ -100,7 +103,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
     // Manage the remaining pixels that are after the last multiple of 32
     for (int i = remaining_start; i < surface; i++) {
         int16_t r_diff = data_r[i] < cr ? cr - data_r[i] : data_r[i] - cr;
-        int16_t g_diff = greens[i] < cg ? cg - greens[i] : greens[i] - cg;
+        int16_t g_diff = data_g[i] < cg ? cg - data_g[i] : data_g[i] - cg;
         int16_t b_diff = data_b[i] < cb ? cb - data_b[i] : data_b[i] - cb;
         distances[i] = r_diff + g_diff + b_diff;
     }
@@ -149,9 +152,8 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 void kmeans(struct img_t *image, int num_clusters) {
     const int surface = image->width * image->height;
     const int sizeOfComponents = image->components * sizeof(uint8_t);
-    const int center_width = image->components + 1;// the 4th byte is useless and can be anything, this is useful for SIMD calculations
 
-    uint8_t *centers = calloc(num_clusters * center_width, sizeof(uint8_t));
+    uint8_t *centers = calloc(num_clusters * image->components, sizeof(uint8_t));
 
     // Initialize the cluster centers using the k-means++ algorithm.
     kmeans_pp(image, num_clusters, centers);

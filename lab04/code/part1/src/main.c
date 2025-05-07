@@ -6,7 +6,6 @@
 int main(int argc, char **argv) {
     struct img_t *img;
     int nb_cluster = 0;
-    printf("%d\n", argc);
     if (argc < 4) {
         fprintf(stderr, "Usage : %s <img_src.png> <nb_clusters> <img_dest.png>\n", argv[0]);
         return EXIT_FAILURE;
