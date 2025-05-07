@@ -27,7 +27,7 @@ if [ "$argv[1]" = regen ]
     return
 end
 
-set kernels 4 8 9 10 20 50 100
+set kernels 4 8 9 10 20 49 50 51 100
 # set bench_kernels 4 50 100 1000
 set bench_kernels 200
 for k in $kernels
@@ -47,5 +47,5 @@ end
 
 for k in $bench_kernels
     set tmp (mktemp)
-    hyperfine --warmup 1 -r 4 "taskset -c 2 ./build/segmentation ../img/sample_640_2.png $k $tmp"
+    hyperfine --warmup 1 -r 10 "taskset -c 2 ./build/segmentation ../img/sample_640_2.png $k $tmp"
 end

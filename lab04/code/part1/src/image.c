@@ -22,6 +22,7 @@ struct img_t *load_image(const char *path) {
     /* Load the image */
     img->data = stbi_load(path, &(img->width), &(img->height), &(img->components), 0);
     if (!(img->data)) {
+        printf("%s\n", stbi_failure_reason());
         fprintf(stderr, "[%s] stbi load image failed\n", __func__);
         perror(__func__);
         exit(EXIT_FAILURE);
