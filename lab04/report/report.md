@@ -92,7 +92,14 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Ce qui nous amène à **132.7 ms** !
 
+## SIMD
+En observant le code de k-means, j'ai d'abord obversé la fonction `distance` qui est très appelée puisqu'elle a 3 références et celles-ci sont dans des boucles. Le problème c'est que ce n'était pas le code le plus simple transformer tel quel car il travaille sur 3 valeurs RGB ce qui n'est déjà pas une puissance de deux. Ensuite, il fallait forcément ressortir le code et l'adapter pour traiter plus d'un pixel à la fois. L'endroit qui me paraissait le plus simple à refactoriser était le traitement des calculs de distances d'un groupe de pixels au premier centre.
 
+```
+Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.oB6zsFQ5aB
+  Time (mean ± σ):     151.6 ms ±   1.4 ms    [User: 148.0 ms, System: 3.1 ms]
+  Range (min … max):   149.7 ms … 154.3 ms    10 runs
+```
 
 // stb_image uses ints pervasively, including for offset calculations.
 // therefore the largest decoded image size we can support with the
