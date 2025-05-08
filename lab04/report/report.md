@@ -109,16 +109,9 @@ On peut maintenant stocker des `u_int16_t` au lieu de `float` ou `unsigned` pour
 u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
 ```
 
-## Résumé des optimisations
-| Titre | Temps |
-| ------|------- |
-| Départ | 1.631s|
-| Optimisations basiques | 1.625s|
-| Allocations inutiles | 195.9ms |
-
 
 ```sh
-sam@sxp ~/H/y/H/H/l/c/part1 (main)> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.png'
+> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.png'
 Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png
   Time (mean ± σ):      2.486 s ±  0.018 s    [User: 2.315 s, System: 0.166 s]
   Range (min … max):    2.463 s …  2.518 s    10 runs
@@ -127,7 +120,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.pn
   Range (min … max):    2.741 s …  2.807 s    10 runs
 ```
 ```sh
-sam@sxp ~/H/y/H/H/l/c/part1 (main)> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png' &&  hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.png'
+> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.png'
 Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png
   Time (mean ± σ):      5.906 s ±  0.021 s    [User: 5.704 s, System: 0.190 s]
   Range (min … max):    5.852 s …  5.921 s    10 runs
@@ -138,7 +131,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.pn
 ```
 
 ```sh
-sam@sxp ~/H/y/H/H/l/c/part1 (main)> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png' &&  hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png'
+> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png'
 Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png
   Time (mean ± σ):     14.382 s ±  0.239 s    [User: 13.147 s, System: 1.192 s]
   Range (min … max):   14.059 s … 14.750 s    10 runs
@@ -149,7 +142,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png
 ```
 
 ```sh
-sam@sxp ~/H/y/H/H/l/c/part1 (main) [SIGINT]> hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' &&  hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
+> hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' && hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
 Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png
   Time (mean ± σ):     12.773 s ±  0.055 s    [User: 11.602 s, System: 1.148 s]
   Range (min … max):   12.722 s … 12.831 s    3 runs
@@ -158,6 +151,18 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png
   Time (mean ± σ):     13.043 s ±  0.189 s    [User: 11.816 s, System: 1.199 s]
   Range (min … max):   12.891 s … 13.255 s    3 runs
 ```
+
+
+## Résumé des optimisations
+| Titre | Temps |
+| ------|------- |
+| Départ | 1.631s|
+| Optimisations basiques | 1.625s|
+| Allocations inutiles | 195.9ms |
+| Int au lieu de float | 132.7ms |
+| SIMD | 132.7ms |
+
+
 
 ## Partie 2 - propre algorithme de traitement d'image
 Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. Je me suis dit que ça pouvait être sympa et bizarre à la fois donc j'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
