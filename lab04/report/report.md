@@ -131,7 +131,7 @@ __m256i max_ab = _mm256_max_epu8(mm256onechannel_color, mm256onechannel_center);
 __m256i min_ab = _mm256_min_epu8(mm256onechannel_color, mm256onechannel_center);  
 __m256i abs_diff = _mm256_subs_epu8(max_ab, min_ab);                              
 ```
-Le problème restant étant la taille de la somme. En effet, 3*255 nécessite plus que 8bits pour être stocké, on devrait prendre 16bits. Mon tableau final de distance sera en `u_int16_t`.
+Le problème restant étant la taille de la somme. En effet, 3*255 nécessite plus que 8bits pour être stocké, on devrait prendre 16bits. Mon tableau final de distance sera en `u_int16_t`. Je dois donc utiliser `_mm256_unpacklo_epi8` pour transformer nos 8 bits vers des valeurs 16bits.
 ```c
 u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
 ```
@@ -159,7 +159,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
   Range (min … max):   149.7 ms … 154.3 ms    10 runs
 ```
 
-C'est là que je me suis rendu compte des quelques heures d'effort n'avait servi à rien, que j'aurai du benchmarker plus préciser et voir que la fonction `kmeanp_pp` n'était appelée qu'une fois et comptait pour une très faible minorité du temps...
+C'est là que je me suis rendu compte des quelques heures d'effort ne donnent aucune amélioration, que j'aurai du benchmarker plus préciser et voir que la fonction `kmeanp_pp` n'était appelée qu'une fois et comptait pour une très faible minorité du temps...
 
 J'ai aussi testé avec des images plus grandes pour voir si cette première parallélisation pouvait avoir un impact à plus large échelle, mais là aussi les résultats sont décevants.
 
@@ -170,15 +170,6 @@ D'abord l'entête de `stb_image` indique que la taille maximum des images est de
 // therefore the largest decoded image size we can support with the
 // current code, even on 64-bit targets, is INT_MAX. this is not a
 // significant limitation for the intended use case.
-```
-
-
-J'ai simplifié le calcul des distances à dist = abs(p1[]) TODO
-
-On peut maintenant stocker des `u_int16_t` au lieu de `float` ou `unsigned` pour les distances, comme on a au max `3*255 < 2^16`.
-
-```c
-u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
 ```
 
 Comme précédemment, je mesure mon temps avec `hyperfine`, sur 2 targets pour tester sans SIMD puis avec. Ce qui change c'est l'image et le nombre de kernel.
@@ -202,19 +193,25 @@ Résultats des lancers sur 4 nombre de kernels différents et 2 images.
 | Sans SIMD | `18869x10427` | 1  | 12.773s |
 | Avec SIMD | `18869x10427` | 1  |13.043s  |
 
-On a **300ms**, **18ms** et **700ms** de différence en plus.
+On a **300ms**, **768ms**, et **180ms** de différence en plus.
 
-Même avec la plus grande image et 1 seul kernel pour le dernier cas, ce qui a priori devrait donner le résultat comme le premier tour devrait être une plus grande portion du temps vu qu'il n'y a que très peu de tours par la suite. On a quand même une différence de **27ms** en plus, on peut supposer que cela ne ve pas beaucoup changer avec des images encore plus grandes, en plus que cela ne deviennent plus tellement réaliste en terme d'usage.
+Même avec la plus grande image et 1 seul kernel pour le dernier cas, ce qui a priori devrait donner le résultat comme le premier tour devrait être une plus grande portion du temps vu qu'il n'y a que très peu de tours par la suite. On a toujours une différence de **270ms** en plus, on peut supposer que cela ne ve pas beaucoup changer avec des images encore plus grandes, en plus que cela ne deviennent plus tellement réaliste en terme d'usage.
+
+En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'avère pas tellement compatible avec la suite des boucles, puisque les centres peuvent changer à chaque pixel, je n'ai pas cherché à l'étendre ou la refactoriser plus loin.
 
 ## Résumé des optimisations
 | Titre | Temps |
 | ------|------- |
-| Départ | 1.631s|
+| Départ | 1.631s |
 | Optimisations basiques | 1.625s|
 | Allocations inutiles | 195.9ms |
 | Int au lieu de float | 132.7ms |
 | Refactoring en SIMD | 151.6ms |
 
+**Conclusion de cette première partie**
+1. Retirer des allocations dans des boucles ça peut vraiment impacter massivement le programme (ici le presque `10x`)
+1. Le SIMD c'est compliqué à comprendre, architecturer, mettre en oeuvre et juste à réfléchir
+1. Avant de me lancer tête baissée, j'aurai du commencer par benchmarker plus précisément, avec un flamegraph ou des marqueurs likwid, pour savoir quelles étaient les sections les plus lentes et voir le potentiel de vectorisation.
 
 ## Partie 2 - propre algorithme de traitement d'image
 Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
