@@ -1,5 +1,17 @@
-# HPC Lab 4 - Rapport
-Auteur: Samuel Roland
+# Rapport HPC Lab 4 - SIMD - Samuel Roland
+
+## My machine
+
+Extract from `fastfetch`
+```
+OS: Fedora Linux 41 (KDE Plasma) x86_64
+Host: 82RL (IdeaPad 3 17IAU7)
+Kernel: Linux 6.13.5-200.fc41.x86_64
+CPU: 12th Gen Intel(R) Core(TM) i7-1255U (12) @ 4.70 GHz
+GPU: Intel Iris Xe Graphics @ 1.25 GHz [Integrated]
+Memory: 15.34 GiB - DDR4
+Swap: 8.00 GiB
+```
 
 ## Baseline
 Benchmark du code de départ pour 200 kernels. **1.631s**
@@ -7,7 +19,6 @@ Benchmark du code de départ pour 200 kernels. **1.631s**
 Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.CklT3lelRc
   Time (mean ± σ):      1.631 s ±  0.017 s    [User: 1.186 s, System: 0.440 s]
   Range (min … max):    1.617 s …  1.655 s    4 runs
- 
 ```
 
 
@@ -65,7 +76,7 @@ Après avoir enlevé les copies inutiles à 3 endroits avant des appels à dista
 
 ## Int au lieu de float
 
-En fait, on a pas besoin d'utiliser des float pour la plupart des tailles, ça correspond à des entiers. Les calculs pourraient être accélérés
+En fait, on a pas besoin d'utiliser des float pour la plupart des tailles, ça correspond à des entiers. Les calculs pourraient être accélérés juste parce que les opérations sur les flottants sont plus coûteuses.
 ```c
 float distance(uint8_t *p1, uint8_t *p2) {
     float r_diff = p1[0] - p2[0];
@@ -74,7 +85,7 @@ float distance(uint8_t *p1, uint8_t *p2) {
     return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
 }
 ```
-Pour s'en convaincre, on peut dumper les float et voir qu'il ne sont jamais très souvent déjà entier ou que leur arrondi ne fera pas grande différence.
+Pour s'en convaincre, on peut dumper les float et voir qu'il sont très souvent déjà entier ou que leur arrondi ne fera pas grande différence.
 ```c
 total_weight = 248323856.000000 and r = 178121952.000000
 total_weight = 228217328.000000 and r = 32316158.000000
@@ -92,21 +103,41 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Ce qui nous amène à **132.7 ms** !
 
-## SIMD
-En observant le code de k-means, j'ai d'abord obversé la fonction `distance` qui est très appelée puisqu'elle a 3 références et celles-ci sont dans des boucles. Le problème c'est que ce n'était pas le code le plus simple transformer tel quel car il travaille sur 3 valeurs RGB ce qui n'est déjà pas une puissance de deux. Ensuite, il fallait forcément ressortir le code et l'adapter pour traiter plus d'un pixel à la fois. L'endroit qui me paraissait le plus simple à refactoriser était le traitement des calculs de distances d'un groupe de pixels au premier centre.
+## Refactoring en SIMD
+En observant le code de k-means, j'ai d'abord obversé la fonction `distance` qui est très appelée puisqu'elle a 3 références (j'aurai du le mesurer pour être sûr à vrai dire) et celles-ci sont dans des boucles. Le problème c'est que ce n'était pas le code le plus simple transformer tel quel car il travaille sur 3 valeurs RGB ce qui n'est déjà pas une puissance de deux. 
+```c
+unsigned distance(uint8_t *p1, uint8_t *p2) {
+    unsigned r_diff = p1[0] - p2[0];
+    unsigned g_diff = p1[1] - p2[1];
+    unsigned b_diff = p1[2] - p2[2];
+    return r_diff * r_diff + g_diff * g_diff + b_diff * b_diff;
+}
+```
 
+Faire du SIMD local n'aurait aucun sens, l'overhead de chargement et déchargement de 3 valeurs serait supérieur au gain de faire les 3 soustractions et les 3 carrés d'un coup. Il fallait forcément ressortir le code de `distance` à chaque appel et l'adapter pour traiter plus d'un pixel à la fois. L'appel qui me paraissait le plus simple à refactoriser est le calcul de distances de tous les pixels au premier centre dans `kmeanp_pp`.
+
+De combien
+
+Voici le même benchmark sur l'image donné, qui nous donne malheusement **151.6ms**, donc **~20ms de plus**...
 ```
 Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.oB6zsFQ5aB
   Time (mean ± σ):     151.6 ms ±   1.4 ms    [User: 148.0 ms, System: 3.1 ms]
   Range (min … max):   149.7 ms … 154.3 ms    10 runs
 ```
 
+C'est là que je me suis rendu compte des quelques heures d'effort n'avait servi à rien, que j'aurai du benchmarker plus préciser et voir que la fonction `kmeanp_pp` n'était appelée qu'une fois et comptait pour une très faible minorité du temps...
+
+J'ai aussi testé avec des images plus grandes pour voir si cette première parallélisation pouvait avoir un impact à plus large échelle, mais là aussi les résultats sont décevants.
+
+D'abord l'entête de `stb_image` indique que la taille maximum des images est de `INT_MAX`, ce qui empêche de charger des très très grandes images.
+
+```c
 // stb_image uses ints pervasively, including for offset calculations.
 // therefore the largest decoded image size we can support with the
 // current code, even on 64-bit targets, is INT_MAX. this is not a
 // significant limitation for the intended use case.
+```
 
-## The refactor
 
 J'ai simplifié le calcul des distances à dist = abs(p1[]) TODO
 
@@ -119,45 +150,45 @@ u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
 
 ```sh
 > hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.png'
-Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png
   Time (mean ± σ):      2.486 s ±  0.018 s    [User: 2.315 s, System: 0.166 s]
-  Range (min … max):    2.463 s …  2.518 s    10 runs
-Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.png
   Time (mean ± σ):      2.786 s ±  0.018 s    [User: 2.598 s, System: 0.183 s]
-  Range (min … max):    2.741 s …  2.807 s    10 runs
 ```
 ```sh
 > hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.png'
-Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png
   Time (mean ± σ):      5.906 s ±  0.021 s    [User: 5.704 s, System: 0.190 s]
-  Range (min … max):    5.852 s …  5.921 s    10 runs
- 
-Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.png
   Time (mean ± σ):      6.674 s ±  0.010 s    [User: 6.455 s, System: 0.206 s]
-  Range (min … max):    6.662 s …  6.688 s    10 runs
 ```
 
 ```sh
 > hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png'
-Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png
   Time (mean ± σ):     14.382 s ±  0.239 s    [User: 13.147 s, System: 1.192 s]
-  Range (min … max):   14.059 s … 14.750 s    10 runs
- 
-Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png
   Time (mean ± σ):     14.562 s ±  0.071 s    [User: 13.302 s, System: 1.230 s]
-  Range (min … max):   14.499 s … 14.732 s    10 runs
 ```
 
 ```sh
 > hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' && hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
-Benchmark 1: taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png
   Time (mean ± σ):     12.773 s ±  0.055 s    [User: 11.602 s, System: 1.148 s]
-  Range (min … max):   12.722 s … 12.831 s    3 runs
- 
-Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png
   Time (mean ± σ):     13.043 s ±  0.189 s    [User: 11.816 s, System: 1.199 s]
-  Range (min … max):   12.891 s … 13.255 s    3 runs
 ```
+
+Comme précédemment, je mesure mon temps avec `hyperfine`, sur 2 targets pour tester sans SIMD puis avec. Ce qui change c'est l'image et le nombre de kernel.
+
+```sh
+> hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' && hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
+```
+
+J'ai réussi à générer une image tiré d'un schéma vectoriel exporté en PNG en `18869x10427`, je n'ai pas réussi à charger en plus grande taille, après de multiple essais pour trouver une image grande mais qui ne génère pas d'erreur `too large`... J'ai repris une image 8k de taille `7680x4320` également.
+
+| Type | Taille image | Kernels | Temps mesuré |
+| --------------- | --------------- | --------------- | --------------- |
+| Sans SIMD | `7680x4320` | 10  | 2.486s |
+| Avec SIMD | `7680x4320` | 10 | 2.786s |
+| Sans SIMD | `7680x4320` | 50  | 5.906s |
+| Avec SIMD | `7680x4320` | 50 | 6.674s |
+| Sans SIMD | `18869x10427` | 50 | 14.382 |
+| Avec SIMD | `18869x10427` | 50 | 14.562s |
+| Sans SIMD | `18869x10427` | 1  | 12.773s |
+| Avec SIMD | `18869x10427` | 1  |13.043s  |
 
 
 ## Résumé des optimisations
@@ -167,7 +198,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png
 | Optimisations basiques | 1.625s|
 | Allocations inutiles | 195.9ms |
 | Int au lieu de float | 132.7ms |
-| SIMD | 132.7ms |
+| Refactoring en SIMD | 132.7ms |
 
 
 
