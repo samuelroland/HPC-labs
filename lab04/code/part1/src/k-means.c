@@ -9,6 +9,7 @@
 
 // This function will calculate the SQUARED euclidean distance between two pixels.
 // Instead of using coordinates, we use the RGB value for evaluating distance.
+// This has been used in kmeans_pp(), but this needs to exist for calls from kmeans()
 unsigned distance(uint8_t *p1, uint8_t *p2) {
     // No SIMD here, because the cost of setup is too high...
     unsigned r_diff = abs(p1[0] - p2[0]);
@@ -62,6 +63,7 @@ void kmeans_pp(struct img_t *image, int num_clusters, uint8_t *centers) {
 
     int incr = 32;// 256 / 8 = 32
     int remaining_start = surface - (surface % incr);
+    // IMPORTANT: < remaining_start is important, < surface is invalid ! because we are doing 2*i !
     for (int i = 0; i < remaining_start; i += incr) {
 
         // Compute abs(mm256onechannel_color - mm256onechannel_center) for on channel on 32 pixels

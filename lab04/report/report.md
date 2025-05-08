@@ -93,7 +93,8 @@ total_weight = 211624336.000000 and r = 128449384.000000
 total_weight = 210208560.000000 and r = 3426519.750000
 total_weight = 199563056.000000 and r = 48471224.000000
 ```
-Je pense qu'on aura pas d'overflow avec des `unsigned int` car `255^2 * 3 = 195075 < INT_MAX = 4294967296`
+
+Je pense qu'on aura pas d'overflow avec des `int` car `255^2 * 3 = 195075 < INT_MAX = 2147483647`.
 
 ```
 Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.nwC7VQYzOW
@@ -116,7 +117,40 @@ unsigned distance(uint8_t *p1, uint8_t *p2) {
 
 Faire du SIMD local n'aurait aucun sens, l'overhead de chargement et déchargement de 3 valeurs serait supérieur au gain de faire les 3 soustractions et les 3 carrés d'un coup. Il fallait forcément ressortir le code de `distance` à chaque appel et l'adapter pour traiter plus d'un pixel à la fois. L'appel qui me paraissait le plus simple à refactoriser est le calcul de distances de tous les pixels au premier centre dans `kmeanp_pp`.
 
-De combien
+La stratégie était donc d'arriver à comparer le plus possible de canaux (RGB) sur une seule itération. Le problème du calcul existant est que la différence entre 2 uint8_t va être soit être négative (d'ailleurs les unsigned ici était temporaire et faux comme ils ne peuvent pas stocker de valeurs négatives, cela est corrigé plus tard). Si elle peut être négative, cela signifie qu'il nous faut un type signé mais qui peut quand même aller à 255, donc on a besoin de prendre des `uint16_t` à la place et donc on peut gérer 2 fois moins de pixels à la fois.
+
+J'ai fait une autre hypothèse sans être sûr qu'elle était valide mathématiquement, les résultats des images ont l'air être correctes à vue. Je suppose que le carré de chaque différence ici n'est utile que pour avoir des différences positives, ainsi si j'arrive à faire des valeurs absolues des résultats des soustractions, alors je peux me passer des carrés. Cependant une valeur absolue n'est pas possible en SIMD, mais GPT 4o m'a donné une astuce. Il est possible de comparer 2 vecteurs SIMD et d'avoir un vecteur résultat contenant la valeur maximum pour chaque index. Pareil pour le minimum.
+
+Donc au final on arrive à rester sur des valeurs positives et avec le type de départ sur 8 bits! Comme dans un `__m256i` on arrive à mettre 32 fois 8 bits, on peut donc gérer 32 canaux à chaque itération et donc **32 pixels sur la boucle générale**!
+
+Note: `mm256onechannel_color` correspond à un vecteur SIMD d'un des 3 canaux RGB d'un pixel (`mm256onechannel_center` c'est pareil mais pour le premier centre), ce morceau est ainsi appelé trois fois.
+
+On voit ici le trick du max et du min, et de la soustraction des valeurs max par min garantissant que la valeur est positive au final.
+```c
+__m256i max_ab = _mm256_max_epu8(mm256onechannel_color, mm256onechannel_center);  
+__m256i min_ab = _mm256_min_epu8(mm256onechannel_color, mm256onechannel_center);  
+__m256i abs_diff = _mm256_subs_epu8(max_ab, min_ab);                              
+```
+Le problème restant étant la taille de la somme. En effet, 3*255 nécessite plus que 8bits pour être stocké, on devrait prendre 16bits. Mon tableau final de distance sera en `u_int16_t`.
+```c
+u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
+```
+
+Pour garder 32 différences à la fois et pas en avoir que 16, je gère simplement 2 vecteurs SIMD `dists_hi` et `dists_lo`.
+```c
+/* Make the 16 low 8 bits integers into 16 times 16 bits integers */              
+__m256i partial_abs_diff = _mm256_unpacklo_epi8(abs_diff, _mm256_setzero_si256());
+dists_lo = _mm256_add_epi8(partial_abs_diff, dists_lo);                           
+/* Same for the 16 high 8 bits integers */                                        
+partial_abs_diff = _mm256_unpackhi_epi8(abs_diff, _mm256_setzero_si256());        
+dists_hi = _mm256_add_epi8(partial_abs_diff, dists_hi);                           
+```
+
+Pour facilement charger toutes les valeurs RGB séparement, j'ai commencer par dupliquer le buffer de l'image dans un format avec 3 vecteurs de `surface` valeurs l'un après l'autre, au lieu des intercalages original. Ce qui me permet de charger un registre `reds` de 32 valeurs depuis `data_r`.
+
+```c
+reds = _mm256_loadu_si256((__m256i *) (data_r + i));
+```
 
 Voici le même benchmark sur l'image donné, qui nous donne malheusement **151.6ms**, donc **~20ms de plus**...
 ```
@@ -147,38 +181,16 @@ On peut maintenant stocker des `u_int16_t` au lieu de `float` ou `unsigned` pour
 u_int16_t *distances = (u_int16_t *) malloc(surface * sizeof(u_int16_t));
 ```
 
-
-```sh
-> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 10 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 10 1.png'
-  Time (mean ± σ):      2.486 s ±  0.018 s    [User: 2.315 s, System: 0.166 s]
-  Time (mean ± σ):      2.786 s ±  0.018 s    [User: 2.598 s, System: 0.183 s]
-```
-```sh
-> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/forest_8k.png 50 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/forest_8k.png 50 1.png'
-  Time (mean ± σ):      5.906 s ±  0.021 s    [User: 5.704 s, System: 0.190 s]
-  Time (mean ± σ):      6.674 s ±  0.010 s    [User: 6.455 s, System: 0.206 s]
-```
-
-```sh
-> hyperfine 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 5 1.png' && hyperfine 'taskset -c 2 ./build/segmentation_simd ../img/big.png 5 1.png'
-  Time (mean ± σ):     14.382 s ±  0.239 s    [User: 13.147 s, System: 1.192 s]
-  Time (mean ± σ):     14.562 s ±  0.071 s    [User: 13.302 s, System: 1.230 s]
-```
-
-```sh
-> hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' && hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
-  Time (mean ± σ):     12.773 s ±  0.055 s    [User: 11.602 s, System: 1.148 s]
-  Time (mean ± σ):     13.043 s ±  0.189 s    [User: 11.816 s, System: 1.199 s]
-```
-
 Comme précédemment, je mesure mon temps avec `hyperfine`, sur 2 targets pour tester sans SIMD puis avec. Ce qui change c'est l'image et le nombre de kernel.
 
 ```sh
 > hyperfine -r 3 'taskset -c 2 ./build/segmentation_no_simd ../img/big.png 1 1.png' && hyperfine -r 3 'taskset -c 2 ./build/segmentation_simd ../img/big.png 1 1.png'
+...
 ```
 
-J'ai réussi à générer une image tiré d'un schéma vectoriel exporté en PNG en `18869x10427`, je n'ai pas réussi à charger en plus grande taille, après de multiple essais pour trouver une image grande mais qui ne génère pas d'erreur `too large`... J'ai repris une image 8k de taille `7680x4320` également.
+J'ai réussi à générer une image tirée d'un schéma vectoriel exporté en PNG en `18869x10427`, je n'ai pas réussi à charger en plus grande taille, après de multiple essais pour trouver une image grande mais qui ne génère pas d'erreur `too large`... J'ai repris une image 8k de taille `7680x4320` également.
 
+Résultats des lancers sur 4 nombre de kernels différents et 2 images.
 | Type | Taille image | Kernels | Temps mesuré |
 | --------------- | --------------- | --------------- | --------------- |
 | Sans SIMD | `7680x4320` | 10  | 2.486s |
@@ -190,6 +202,9 @@ J'ai réussi à générer une image tiré d'un schéma vectoriel exporté en PNG
 | Sans SIMD | `18869x10427` | 1  | 12.773s |
 | Avec SIMD | `18869x10427` | 1  |13.043s  |
 
+On a **300ms**, **18ms** et **700ms** de différence en plus.
+
+Même avec la plus grande image et 1 seul kernel pour le dernier cas, ce qui a priori devrait donner le résultat comme le premier tour devrait être une plus grande portion du temps vu qu'il n'y a que très peu de tours par la suite. On a quand même une différence de **27ms** en plus, on peut supposer que cela ne ve pas beaucoup changer avec des images encore plus grandes, en plus que cela ne deviennent plus tellement réaliste en terme d'usage.
 
 ## Résumé des optimisations
 | Titre | Temps |
@@ -198,10 +213,11 @@ J'ai réussi à générer une image tiré d'un schéma vectoriel exporté en PNG
 | Optimisations basiques | 1.625s|
 | Allocations inutiles | 195.9ms |
 | Int au lieu de float | 132.7ms |
-| Refactoring en SIMD | 132.7ms |
-
+| Refactoring en SIMD | 151.6ms |
 
 
 ## Partie 2 - propre algorithme de traitement d'image
-Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. Je me suis dit que ça pouvait être sympa et bizarre à la fois donc j'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
+Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
+
+
 
