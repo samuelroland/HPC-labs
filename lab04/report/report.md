@@ -1,8 +1,8 @@
 # Rapport HPC Lab 4 - SIMD - Samuel Roland
 
-## My machine
+## Ma machine
 
-Extract from `fastfetch`
+Extrait de l'ouput de `fastfetch`
 ```
 OS: Fedora Linux 41 (KDE Plasma) x86_64
 Host: 82RL (IdeaPad 3 17IAU7)
@@ -13,7 +13,8 @@ Memory: 15.34 GiB - DDR4
 Swap: 8.00 GiB
 ```
 
-## Baseline
+## Partie 1 - SIMD sur segmentation
+### Baseline
 Benchmark du code de départ pour 200 kernels. **1.631s**
 ```
 Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.CklT3lelRc
@@ -22,7 +23,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 ```
 
 
-## Optimisations basiques
+### Optimisations basiques
 Après avoir propagé manuellement les valeurs constantes.
 ```
 Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/tmp.oYzAAusKn5
@@ -43,7 +44,7 @@ const int sizeOfComponents = image->components * sizeof(uint8_t);
 for (int i = 0; i < surface; ++i) {
 ```
 
-## Allocations inutiles
+### Allocations inutiles
 
 On a souvent des cas avec des `malloc` inutiles, comme ici on fait une copie des pixels avant de les envoyer à `distance()` qui ne fait pas de modifications donc la copie est complètement inutile.
 ```c
@@ -74,7 +75,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Après avoir enlevé les copies inutiles à 3 endroits avant des appels à distance, on a gagne énormenent de temps. On passe de **1.625s** à **0.1959 s** !
 
-## Int au lieu de float
+### Types entiers au lieu de flottants
 
 En fait, on a pas besoin d'utiliser des float pour la plupart des tailles, ça correspond à des entiers. Les calculs pourraient être accélérés juste parce que les opérations sur les flottants sont plus coûteuses.
 ```c
@@ -104,7 +105,7 @@ Benchmark 1: taskset -c 2 ./build/segmentation ../img/sample_640_2.png 200 /tmp/
 
 Ce qui nous amène à **132.7 ms** !
 
-## Refactoring en SIMD
+### Refactoring en SIMD
 En observant le code de k-means, j'ai d'abord obversé la fonction `distance` qui est très appelée puisqu'elle a 3 références (j'aurai du le mesurer pour être sûr à vrai dire) et celles-ci sont dans des boucles. Le problème c'est que ce n'était pas le code le plus simple transformer tel quel car il travaille sur 3 valeurs RGB ce qui n'est déjà pas une puissance de deux. 
 ```c
 unsigned distance(uint8_t *p1, uint8_t *p2) {
@@ -199,16 +200,16 @@ Même avec la plus grande image et 1 seul kernel pour le dernier cas, ce qui a p
 
 En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'avère pas tellement compatible avec la suite des boucles, puisque les centres peuvent changer à chaque pixel, je n'ai pas cherché à l'étendre ou la refactoriser plus loin.
 
-## Résumé des optimisations
+### Résumé des optimisations
 | Titre | Temps |
 | ------|------- |
 | Départ | 1.631s |
 | Optimisations basiques | 1.625s|
 | Allocations inutiles | 195.9ms |
-| Int au lieu de float | 132.7ms |
+| Types entiers au lieu de flottants | 132.7ms |
 | Refactoring en SIMD | 151.6ms |
 
-**Conclusion de cette première partie**
+### Conclusion de cette première partie
 1. Retirer des allocations dans des boucles ça peut vraiment impacter massivement le programme (ici le presque `10x`)
 1. Le SIMD c'est compliqué à comprendre, architecturer, mettre en oeuvre et juste à réfléchir
 1. Avant de me lancer tête baissée, j'aurai du commencer par benchmarker plus précisément, avec un flamegraph ou des marqueurs likwid, pour savoir quelles étaient les sections les plus lentes et voir le potentiel de vectorisation.
@@ -216,5 +217,5 @@ En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'
 ## Partie 2 - propre algorithme de traitement d'image
 Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
-
+Comme demandé j'ai désactivé les optimisations dans cette partie `-O0 -g -Wall`.
 
