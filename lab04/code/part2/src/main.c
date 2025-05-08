@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
 
     printf("Nb of components in this image %d\n", img->components);
 
+    printf("Inverting colors and applying a luminosity factor of %d on image %s\n", brightness_factor, argv[1]);
     weirdimg_transform(img, brightness_factor);
 
     save_image(argv[3], img);

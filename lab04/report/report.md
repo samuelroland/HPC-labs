@@ -215,7 +215,33 @@ En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'
 1. Avant de me lancer tête baissée, j'aurai du commencer par benchmarker plus précisément, avec un flamegraph ou des marqueurs likwid, pour savoir quelles étaient les sections les plus lentes et voir le potentiel de vectorisation.
 
 ## Partie 2 - propre algorithme de traitement d'image
-Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer de l'assombrissement ou de l'éclaircissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
+Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer respectivement un éclaircissement ou un assombrissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
 Comme demandé j'ai désactivé les optimisations dans cette partie `-O0 -g -Wall`.
+
+
+Ainsi la commande suivante va générer une image sans changer sa luminosité, on voit donc uniquement l'inversion des couleurs.
+```sh
+./build/weirdimg ../img/sample_640_2.png 1 10.png
+```
+ 
+![-3-sample.png](./imgs/-3-sample.png)
+
+Ainsi la commande suivante va générer une image plus sombre d'un facteur de 3 (tous les canaux sont multipliés par 3)
+
+```sh
+./build/weirdimg ../img/sample_640_2.png -3 10.png
+```
+ 
+![](./imgs/reverse-sample.png)
+### Baseline
+Une première mesure du code sans SIMD, nous indique **399.2ms** sur l'image 2K avec 2 d'éclaircissement.
+```
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_2k.png 2 /tmp/tmp.aRRZAwwgEs
+  Time (mean ± σ):     399.2 ms ±   1.0 ms    [User: 390.5 ms, System: 7.8 ms]
+  Range (min … max):   398.0 ms … 400.6 ms    10 runs
+ 
+```
+
+### SIMD
 
