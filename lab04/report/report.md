@@ -243,7 +243,38 @@ Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_2k.png 2 /tmp/tmp.aRRZA
 ```
 
 ### SIMD
-Je n'ai pas bien compris ce en quoi il fallait faire attention aux options de compilation. Je sais qu'il y a de l'auto-vectorisation et que peut-être on voudrait ne pas en avoir, mais en `-O0 -g -Wall -mavx2` je ne vois pas d'améliorer du SIMD donc j'ai activé `-O3`. Je n'ai pas eu le temps de regarder.
+Je n'ai pas bien compris ce en quoi il fallait faire attention aux options de compilation. Je sais qu'il y a de l'auto-vectorisation et que peut-être on voudrait ne pas en avoir, mais en `-O0 -g -Wall -mavx2` je ne vois pas d'améliorer du SIMD donc j'ai activé `-O3`. Sur goldbolt on voit que code sans SIMD est auto vectorisé puisqu'on voit des `xmm1`, `vpbroadcastd` etc, j'imagine que le but est de voir si on arrive faire mieux que le compilateur en le faisant à la main.
+
+A nouveau on essaie de gérer 32 valeurs à la fois. La première itération avec la partie inversion est assez directe, il suffit de charger 32 fois la valeur 255, c'est à dire de remplir de int avec tous les bits à 1. On peut ensuite faire simplement la soustraction `_mm256_sub_epi8` (pas besoin du mode saturation, le résultat ne peut pas underflow). Par contre, on a besoin du mode "u" (unaligned je suppose) parce que on s'assure pas d'un alignement sur 32 bytes du pointeur donné -> `_mm256_loadu_si256`.
+
+```c
+int incr = 32;
+int remaining_surface_start = surfaceTimesComponents - (surfaceTimesComponents % incr);
+__m256i max_values = _mm256_set1_epi32(0xFFFFFFFF);
+
+for (int i = 0; i < remaining_surface_start; i += incr) {
+    // let's load 32 channel values
+    __m256i values = _mm256_loadu_si256((__m256i *) (data + i));
+    // let's invert them
+    _mm256_sub_epi8(max_values, values);
+
+
+    _mm256_storeu_si256((__m256i *) (data + i), values);
+```
+
+L'étape de multiplication est une autre paire de manche, comme elle n'est pas supportée malheusement sur 8 bits, il faut passer à 16bits, et maintenir 2 vecteurs SIMD pour continuer à en avoir 32 valeurs de 16bits maintenant au lieu de 8.
+
+```c
+// Unpack values into 16 bits for the multiplication
+__m256i lo = _mm256_unpacklo_epi8(values, _mm256_setzero_si256());
+__m256i hi = _mm256_unpackhi_epi8(values, _mm256_setzero_si256());
+// Do the multiplication
+lo = _mm256_mullo_epi16(lo, brightness_factor_mult);
+hi = _mm256_mullo_epi16(hi, brightness_factor_mult);
+```
+
+Pour s'assurer qu'on dépasse pas le max et que si ça dépasse, ce sera bien 255 comme valeur et pas autre chose du au tronquage, il nous faut tout comme le code de départ, prendre le max entre 255 et la valeur actuel.
+
 
 Comparaison basique des performances sur l'image donnée
 ```sh
