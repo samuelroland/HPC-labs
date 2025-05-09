@@ -273,14 +273,57 @@ lo = _mm256_mullo_epi16(lo, brightness_factor_mult);
 hi = _mm256_mullo_epi16(hi, brightness_factor_mult);
 ```
 
-Pour s'assurer qu'on dépasse pas le max et que si ça dépasse, ce sera bien 255 comme valeur et pas autre chose du au tronquage, il nous faut tout comme le code de départ, prendre le max entre 255 et la valeur actuel.
+Pour s'assurer qu'on dépasse pas le max et que si ça dépasse, ce sera bien 255 comme valeur et pas autre chose du au tronquage, il nous faut tout comme le code de départ, prendre le max entre 255 et la valeur actuel. On peut ensuite repaqueter ensemble en tronquant les 8 high bits inutiles des 16 bits et stocker ça dans l'image.
 
-
-Comparaison basique des performances sur l'image donnée
-```sh
+```c
+// Make sure the 16 bits don't go over the RGB_MAX because taking the 8 low bits will not be RGB_MAX if they are above !
+lo = _mm256_max_epi16(lo, max_values);
+hi = _mm256_max_epi16(hi, max_values);
+__m256i packed = _mm256_packus_epi16(lo, hi);
+_mm256_storeu_si256((__m256i *) (data + i), packed);
 ```
 
-Comparaison basique des performances sur une image 8k
+
+Comme attendu, aucune différence de temps quand on met -5 puisque cela implique la division que nous n'avons pas implémenté, les 2 versions ne sont donc pas en SIMD.
+
 ```sh
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png -5 /tmp/tmp.y3PAaRmgJN
+  Time (mean ± σ):      40.8 ms ±   0.6 ms    [User: 38.2 ms, System: 2.4 ms]
+  Range (min … max):    40.2 ms …  42.2 ms    10 runs
  
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png -5 /tmp/tmp.y3PAaRmgJN
+  Time (mean ± σ):      40.3 ms ±   0.8 ms    [User: 37.9 ms, System: 2.2 ms]
+  Range (min … max):    39.6 ms …  42.1 ms    10 runs
 ```
+
+Comparaison basique des performances sur l'image donnée, on a malheusement perdu à cause de l'overhead.
+```sh
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png 5 /tmp/tmp.xbBrkMfhrv
+  Time (mean ± σ):      18.6 ms ±   0.5 ms    [User: 16.1 ms, System: 2.2 ms]
+  Range (min … max):    18.1 ms …  19.7 ms    10 runs
+ 
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png 5 /tmp/tmp.xbBrkMfhrv
+  Time (mean ± σ):      26.1 ms ±   0.3 ms    [User: 23.3 ms, System: 2.6 ms]
+  Range (min … max):    25.7 ms …  26.5 ms    10 runs
+```
+
+Comparaison basique des performances sur une image 8k, c'est pareil, on s'améliore pas.
+```sh
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 5 /tmp/tmp.3IxhEsvG0A
+  Time (mean ± σ):      1.989 s ±  0.036 s    [User: 1.868 s, System: 0.115 s]
+  Range (min … max):    1.964 s …  2.031 s    3 runs
+ 
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 5 /tmp/tmp.3IxhEsvG0A
+  Time (mean ± σ):      3.778 s ±  0.007 s    [User: 3.636 s, System: 0.132 s]
+  Range (min … max):    3.770 s …  3.782 s    3 runs
+```
+
+Avec **big.png** on est déjà beaucoup plus proche d'être plus efficace.
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/big.png 5 /tmp/tmp.lL5IU1Le2y
+  Time (mean ± σ):     11.368 s ±  0.162 s    [User: 10.591 s, System: 0.746 s]
+  Range (min … max):   11.252 s … 11.554 s    3 runs
+ 
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 5 /tmp/tmp.lL5IU1Le2y
+  Time (mean ± σ):     11.459 s ±  0.118 s    [User: 10.717 s, System: 0.709 s]
+  Range (min … max):   11.324 s … 11.546 s    3 runs
+ 
