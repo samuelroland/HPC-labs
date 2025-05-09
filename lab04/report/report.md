@@ -215,7 +215,7 @@ En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'
 1. Avant de me lancer tête baissée, j'aurai du commencer par benchmarker plus précisément, avec un flamegraph ou des marqueurs likwid, pour savoir quelles étaient les sections les plus lentes et voir le potentiel de vectorisation.
 
 ## Partie 2 - propre algorithme de traitement d'image
-Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer respectivement un éclaircissement ou un assombrissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
+Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. **Ce facteur pourra être entre -10 et 10 compris afin d'appliquer respectivement un éclaircissement ou un assombrissement**. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
 
 
@@ -256,8 +256,9 @@ for (int i = 0; i < remaining_surface_start; i += incr) {
     // let's load 32 channel values
     __m256i values = _mm256_loadu_si256((__m256i *) (data + i));
     // let's invert them
-    _mm256_sub_epi8(max_values, values);
+    values = _mm256_sub_epi8(max_values, values);
 
+    ...
 
     _mm256_storeu_si256((__m256i *) (data + i), values);
 ```
@@ -283,47 +284,51 @@ __m256i packed = _mm256_packus_epi16(lo, hi);
 _mm256_storeu_si256((__m256i *) (data + i), packed);
 ```
 
-
 Comme attendu, aucune différence de temps quand on met -5 puisque cela implique la division que nous n'avons pas implémenté, les 2 versions ne sont donc pas en SIMD.
 
 ```sh
 Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png -5 /tmp/tmp.y3PAaRmgJN
   Time (mean ± σ):      40.8 ms ±   0.6 ms    [User: 38.2 ms, System: 2.4 ms]
-  Range (min … max):    40.2 ms …  42.2 ms    10 runs
- 
 Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png -5 /tmp/tmp.y3PAaRmgJN
   Time (mean ± σ):      40.3 ms ±   0.8 ms    [User: 37.9 ms, System: 2.2 ms]
-  Range (min … max):    39.6 ms …  42.1 ms    10 runs
 ```
 
-Comparaison basique des performances sur l'image donnée, on a malheusement perdu à cause de l'overhead.
+Comparaison basique des performances sur l'image donnée, le gain est minime voir négatif selon les exécutions.
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png 5 /tmp/tmp.xbBrkMfhrv
-  Time (mean ± σ):      18.6 ms ±   0.5 ms    [User: 16.1 ms, System: 2.2 ms]
-  Range (min … max):    18.1 ms …  19.7 ms    10 runs
- 
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png 5 /tmp/tmp.xbBrkMfhrv
-  Time (mean ± σ):      26.1 ms ±   0.3 ms    [User: 23.3 ms, System: 2.6 ms]
-  Range (min … max):    25.7 ms …  26.5 ms    10 runs
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png 5 /tmp/tmp.ky4hqEH3Li
+  Time (mean ± σ):      18.6 ms ±   0.3 ms    [User: 16.7 ms, System: 1.7 ms]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png 5 /tmp/tmp.ky4hqEH3Li
+  Time (mean ± σ):      18.4 ms ±   0.4 ms    [User: 16.5 ms, System: 1.8 ms]
 ```
 
-Comparaison basique des performances sur une image 8k, c'est pareil, on s'améliore pas.
+Comparaison basique des performances sur une image 8k, c'est pareil, le gan est de 1-5ms...
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 5 /tmp/tmp.3IxhEsvG0A
-  Time (mean ± σ):      1.989 s ±  0.036 s    [User: 1.868 s, System: 0.115 s]
-  Range (min … max):    1.964 s …  2.031 s    3 runs
- 
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 5 /tmp/tmp.3IxhEsvG0A
-  Time (mean ± σ):      3.778 s ±  0.007 s    [User: 3.636 s, System: 0.132 s]
-  Range (min … max):    3.770 s …  3.782 s    3 runs
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 5 /tmp/tmp.CIIcxUHIkS
+  Time (mean ± σ):      1.937 s ±  0.004 s    [User: 1.833 s, System: 0.100 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 5 /tmp/tmp.CIIcxUHIkS
+  Time (mean ± σ):      1.933 s ±  0.004 s    [User: 1.816 s, System: 0.113 s]
 ```
 
-Avec **big.png** on est déjà beaucoup plus proche d'être plus efficace.
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/big.png 5 /tmp/tmp.lL5IU1Le2y
-  Time (mean ± σ):     11.368 s ±  0.162 s    [User: 10.591 s, System: 0.746 s]
-  Range (min … max):   11.252 s … 11.554 s    3 runs
- 
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 5 /tmp/tmp.lL5IU1Le2y
-  Time (mean ± σ):     11.459 s ±  0.118 s    [User: 10.717 s, System: 0.709 s]
-  Range (min … max):   11.324 s … 11.546 s    3 runs
- 
+La différence ets de 14ms si on passe à 2 de luminosité.
+```sh
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 2 /tmp/tmp.hTvWnubCJa
+  Time (mean ± σ):      2.345 s ±  0.017 s    [User: 2.233 s, System: 0.107 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 2 /tmp/tmp.hTvWnubCJa
+  Time (mean ± σ):      2.331 s ±  0.001 s    [User: 2.215 s, System: 0.111 s]
+```
+
+Avec **big.png** on est moins bien.
+```sh
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/big.png 5 /tmp/tmp.eVlSslRWGd
+  Time (mean ± σ):     11.185 s ±  0.021 s    [User: 10.500 s, System: 0.663 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 5 /tmp/tmp.eVlSslRWGd
+  Time (mean ± σ):     11.321 s ±  0.049 s    [User: 10.635 s, System: 0.659 s]
+```
+
+C'est un peu étonnant que l'on soit si proche à vrai dire, je m'attendais à plus d'overhead ou plus de gain du SIMD...
+
+Pour optimiser encore, on pourrait essayer d'améliorer le packing en ne gérant dès le début que des `uint16_t` au lieu de mixer les deux. Il y a aussi plusieurs cas comme `brightness_factor` qui vaut -1, 0 et 1 qui sont particuliers et qui pourraient être accélérés.
+
+## Partie 3
+Je suis désolé il est tard et je n'ai pas le courage de faire encore cette troisième partie...
+

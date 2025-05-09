@@ -27,8 +27,7 @@ void weirdimg_transform(struct img_t *image, int16_t brightness_factor) {
             // let's load 32 channel values
             __m256i values = _mm256_loadu_si256((__m256i *) (data + i));
             // let's invert them
-            _mm256_sub_epi8(max_values, values);
-
+            values = _mm256_sub_epi8(max_values, values);
             // Apply the brightness_factor by multiplication
             // Unpack values into 16 bits for the multiplication
             __m256i lo = _mm256_unpacklo_epi8(values, _mm256_setzero_si256());
