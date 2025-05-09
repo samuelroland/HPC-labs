@@ -327,7 +327,7 @@ Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 5 /tmp/tmp.eVlSslRWGd
 
 C'est un peu étonnant que l'on soit si proche à vrai dire, je m'attendais à plus d'overhead ou plus de gain du SIMD...
 
-Pour optimiser encore, on pourrait essayer d'améliorer le packing en ne gérant dès le début que des `uint16_t` au lieu de mixer les deux. Il y a aussi plusieurs cas comme `brightness_factor` qui vaut -1, 0 et 1 qui sont particuliers et qui pourraient être accélérés.
+Pour optimiser encore, on pourrait essayer d'améliorer le packing en ne gérant dès le début que des `uint16_t` au lieu de mixer les deux. Il y a aussi plusieurs cas comme `brightness_factor` qui vaut -1, 0 et 1 qui sont particuliers et qui pourraient être accélérés. Pour éviter le premier unpacking on pourrait aussi faire une copie de toute l'image au début et à la fin pour passer en 16bits en une fois, l'overhead serait à mesurer et probablement que cela n'améliorerait la situation que les grandes images.
 
 ## Partie 3
 Je suis désolé il est tard et je n'ai pas le courage de faire encore cette troisième partie...
