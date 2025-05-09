@@ -8,7 +8,7 @@ set(WEIRD_SRC src/main.c src/weird.c src/image.c)
 
 include_directories(../lib/stb include/)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g -Wall -mavx2")
 add_executable(weirdimg ${WEIRD_SRC})
 
 target_link_libraries(weirdimg m)

@@ -217,7 +217,6 @@ En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'
 ## Partie 2 - propre algorithme de traitement d'image
 Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. Ce facteur pourra être entre -10 et 10 compris afin d'appliquer respectivement un éclaircissement ou un assombrissement. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
-Comme demandé j'ai désactivé les optimisations dans cette partie `-O0 -g -Wall`.
 
 
 Ainsi la commande suivante va générer une image sans changer sa luminosité, on voit donc uniquement l'inversion des couleurs.
@@ -244,4 +243,13 @@ Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_2k.png 2 /tmp/tmp.aRRZA
 ```
 
 ### SIMD
+Je n'ai pas bien compris ce en quoi il fallait faire attention aux options de compilation. Je sais qu'il y a de l'auto-vectorisation et que peut-être on voudrait ne pas en avoir, mais en `-O0 -g -Wall -mavx2` je ne vois pas d'améliorer du SIMD donc j'ai activé `-O3`. Je n'ai pas eu le temps de regarder.
 
+Comparaison basique des performances sur l'image donnée
+```sh
+```
+
+Comparaison basique des performances sur une image 8k
+```sh
+ 
+```

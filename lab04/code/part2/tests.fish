@@ -47,4 +47,6 @@ end
 
 echo starting benchmark
 set tmp (mktemp)
-hyperfine --warmup 1 -r 10 "taskset -c 2 ./build/weirdimg ../img/forest_2k.png 2 $tmp"
+set img sample_640_2.png
+hyperfine -r 10 "taskset -c 2 ./build/no_simd ../img/$img 2 $tmp"
+hyperfine -r 10 "taskset -c 2 ./build/weirdimg ../img/$img 2 $tmp"
