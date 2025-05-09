@@ -218,32 +218,31 @@ En discutant avec Aubry, nous nous sommes rendus compte que cette approche ne s'
 Je demandais des idées à Copilot d'algorithmes qui faisaient plusieurs calculs pour peut-être voir un bénéfice en SIMD. Après quelques allers-retours, il m'a proposé d'inverser les couleurs et d'appliquer un facteur de niveau de luminosité. **Ce facteur pourra être entre -10 et 10 compris afin d'appliquer respectivement un éclaircissement ou un assombrissement**. J'ai appelé ma target `weirdimg` parce que je ne sais pas encore trop à quoi ça va ressembler.
 
 
-
 Ainsi la commande suivante va générer une image sans changer sa luminosité, on voit donc uniquement l'inversion des couleurs.
 ```sh
 ./build/weirdimg ../img/sample_640_2.png 1 10.png
 ```
  
-![-3-sample.png](./imgs/-3-sample.png)
+![](./imgs/reverse-sample.png)
 
 Ainsi la commande suivante va générer une image plus sombre d'un facteur de 3 (tous les canaux sont multipliés par 3)
 
 ```sh
-./build/weirdimg ../img/sample_640_2.png -3 10.png
+./build/weirdimg ../img/sample_640_2.png 3 10.png
 ```
+
+![3-sample.png](./imgs/3-sample.png)
  
-![](./imgs/reverse-sample.png)
 ### Baseline
 Une première mesure du code sans SIMD, nous indique **399.2ms** sur l'image 2K avec 2 d'éclaircissement.
 ```
 Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_2k.png 2 /tmp/tmp.aRRZAwwgEs
   Time (mean ± σ):     399.2 ms ±   1.0 ms    [User: 390.5 ms, System: 7.8 ms]
   Range (min … max):   398.0 ms … 400.6 ms    10 runs
- 
 ```
 
 ### SIMD
-Je n'ai pas bien compris ce en quoi il fallait faire attention aux options de compilation. Je sais qu'il y a de l'auto-vectorisation et que peut-être on voudrait ne pas en avoir, mais en `-O0 -g -Wall -mavx2` je ne vois pas d'améliorer du SIMD donc j'ai activé `-O3`. Sur goldbolt on voit que code sans SIMD est auto vectorisé puisqu'on voit des `xmm1`, `vpbroadcastd` etc, j'imagine que le but est de voir si on arrive faire mieux que le compilateur en le faisant à la main.
+Sur goldbolt on voit que code sans SIMD est auto vectorisé via `-O3` puisqu'on voit des `xmm1`, `vpbroadcastd` etc, donc comme j'imagine que le but est de voir la différence entre aucune vectorisation et notre vectorisation manuelle je vais rester en `-O0 -g -Wall -mavx2`.
 
 A nouveau on essaie de gérer 32 valeurs à la fois. La première itération avec la partie inversion est assez directe, il suffit de charger 32 fois la valeur 255, c'est à dire de remplir de int avec tous les bits à 1. On peut ensuite faire simplement la soustraction `_mm256_sub_epi8` (pas besoin du mode saturation, le résultat ne peut pas underflow). Par contre, on a besoin du mode "u" (unaligned je suppose) parce que on s'assure pas d'un alignement sur 32 bytes du pointeur donné -> `_mm256_loadu_si256`.
 
@@ -295,37 +294,37 @@ Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png -5 /tmp/tmp.y
 
 Comparaison basique des performances sur l'image donnée, le gain est minime voir négatif selon les exécutions.
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png 5 /tmp/tmp.ky4hqEH3Li
-  Time (mean ± σ):      18.6 ms ±   0.3 ms    [User: 16.7 ms, System: 1.7 ms]
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png 5 /tmp/tmp.ky4hqEH3Li
-  Time (mean ± σ):      18.4 ms ±   0.4 ms    [User: 16.5 ms, System: 1.8 ms]
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/sample_640_2.png 4 /tmp/tmp.43hBJJhd5M
+  Time (mean ± σ):      51.3 ms ±   1.1 ms    [User: 48.8 ms, System: 2.2 ms]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/sample_640_2.png 4 /tmp/tmp.43hBJJhd5M
+  Time (mean ± σ):      50.2 ms ±   0.8 ms    [User: 47.9 ms, System: 2.0 ms]
 ```
 
-Comparaison basique des performances sur une image 8k, c'est pareil, le gan est de 1-5ms...
+Comparaison basique des performances sur une image 8k, le gain est bcp plus noté avec **200ms**
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 5 /tmp/tmp.CIIcxUHIkS
-  Time (mean ± σ):      1.937 s ±  0.004 s    [User: 1.833 s, System: 0.100 s]
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 5 /tmp/tmp.CIIcxUHIkS
-  Time (mean ± σ):      1.933 s ±  0.004 s    [User: 1.816 s, System: 0.113 s]
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 4 /tmp/tmp.mYQJkIB0bH
+  Time (mean ± σ):      5.963 s ±  0.023 s    [User: 5.845 s, System: 0.106 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 4 /tmp/tmp.mYQJkIB0bH
+  Time (mean ± σ):      5.763 s ±  0.016 s    [User: 5.638 s, System: 0.114 s]
 ```
 
-La différence ets de 14ms si on passe à 2 de luminosité.
+La différence est de **100ms** si on passe à 2 de luminosité. La multiplication se fait dans tous les cas, bizarres que cela diminue le gain d'avoir un plus petit facteur ?
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 2 /tmp/tmp.hTvWnubCJa
-  Time (mean ± σ):      2.345 s ±  0.017 s    [User: 2.233 s, System: 0.107 s]
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 2 /tmp/tmp.hTvWnubCJa
-  Time (mean ± σ):      2.331 s ±  0.001 s    [User: 2.215 s, System: 0.111 s]
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/forest_8k.png 1 /tmp/tmp.rVUpCgLv31
+  Time (mean ± σ):     11.927 s ±  0.309 s    [User: 11.725 s, System: 0.156 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/forest_8k.png 1 /tmp/tmp.rVUpCgLv31
+  Time (mean ± σ):     11.821 s ±  0.066 s    [User: 11.625 s, System: 0.160 s]
 ```
 
-Avec **big.png** on est moins bien.
+Avec **big.png** on est également mieux, de **2.1s**!
 ```sh
-Benchmark 1: taskset -c 2 ./build/no_simd ../img/big.png 5 /tmp/tmp.eVlSslRWGd
-  Time (mean ± σ):     11.185 s ±  0.021 s    [User: 10.500 s, System: 0.663 s]
-Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 5 /tmp/tmp.eVlSslRWGd
-  Time (mean ± σ):     11.321 s ±  0.049 s    [User: 10.635 s, System: 0.659 s]
+Benchmark 1: taskset -c 2 ./build/no_simd ../img/big.png 4 /tmp/tmp.atHMOebaxk
+  Time (mean ± σ):     35.987 s ±  0.124 s    [User: 35.191 s, System: 0.666 s]
+Benchmark 1: taskset -c 2 ./build/weirdimg ../img/big.png 4 /tmp/tmp.atHMOebaxk
+  Time (mean ± σ):     33.825 s ±  0.211 s    [User: 33.044 s, System: 0.672 s]
 ```
 
-C'est un peu étonnant que l'on soit si proche à vrai dire, je m'attendais à plus d'overhead ou plus de gain du SIMD...
+C'est un peu étonnant que l'on soit si proche à vrai dire, je m'attendais à plus d'overhead ou plus de gain du SIMD, enfin que la différence soit plus notée... On est loin de l'idéal théorique de 16 valeurs gérées à la fois donc 16 fois plus rapide...
 
 Pour optimiser encore, on pourrait essayer d'améliorer le packing en ne gérant dès le début que des `uint16_t` au lieu de mixer les deux. Il y a aussi plusieurs cas comme `brightness_factor` qui vaut -1, 0 et 1 qui sont particuliers et qui pourraient être accélérés. Pour éviter le premier unpacking on pourrait aussi faire une copie de toute l'image au début et à la fin pour passer en 16bits en une fois, l'overhead serait à mesurer et probablement que cela n'améliorerait la situation que les grandes images.
 
