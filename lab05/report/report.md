@@ -337,11 +337,56 @@ RepeatedBtn char_to_repeated_btn(char c) {
 ...
 ```
 Et bien il se trouve qu'elle ne prend qu'un infime partie du temps de calcul.
-```
+```c
 130   │    67,400 ( 0.06%)  => encoder.c:char_to_repeated_btn (4,000x)
 ```
 
 Mais j'ai un doute sur cette mesure, peut-être que la fonction est trop courte et que sa mesure est biaisée mais pourtant ce n'est pas avec perf, il n'y a pas ce problème de sampling qui pourrait louper une partie des fonctions appelées.
 
-### Decode float buffer comparaison
+### Conclusion encodeur
+Pour améliorer ce code, j'aurai fait dans l'ordre
+1. Explorer une autre librairie de sauvegarde du fichier, ou aller profiler l'intérieur de la librairie pour voir s'il y a un paramètre externe qui affecte ces performances
+1. Explorer le sujet de memcpy non aligné, même si la partie décodeur ne peut améliorer l'ensemble que de peu au vu de son ratio global
 
+### Decode float buffer comparaison
+J'ai retiré mes printfs de debug et gardé les même flags de compilation que pour l'encodeur.
+
+```sh
+sudo perf record --call-graph dwarf -e branch-misses,branches,cpu-cycles ./build/dtmf_encdec decode output2.wav
+```
+
+![perf-four.png](imgs/perf-four.png)
+
+```sh
+> valgrind --tool=callgrind ./build/dtmf_encdec decode output2.wav
+> callgrind_annotate --auto=yes --sort=Ir --show=Ir | bat -l c
+```
+
+Tout le temps est passé dans `get_near_score`, qu'on voit à l'annotation qu'elle est appelée **157289 fois** !!
+
+```c
+60   │ 11,100,042,019 (99.76%)  => decoder.c:get_near_score (157,289x)
+```
+
+Peut-être que réimplémenter qu'un branchement plutôt qu'une `fabs` serait plus rapide, pour avoir le max - min. Comme mentionné dans un précédent rapport également, il serait possible de comparer qu'une fraction des floats, un float sur 4 ou sur 8 par exemple afin d'aller plus vite en "trichant un peu" en terme de calcul de moyenne approchée.
+
+```c
+  49   │             .           float get_near_score(const float *audio_chunk, float *reference_tone) {
+  50   │     1,101,023 ( 0.01%)      double sum = 0;
+  51   │             .           
+  52   │ 4,162,024,229 (37.41%)      for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
+  53   │ 6,936,444,900 (62.34%)          sum += fabs(audio_chunk[i] - reference_tone[i]);
+  54   │             .               }
+  55   │       314,578 ( 0.00%)      return sum / TONE_SAMPLES_COUNT;
+  56   │       157,289 ( 0.00%)  }
+```
+
+Peut-être que du loop unrolling peut aussi aider, je n'arrive pas à bien comprendre ce que le 37% sur le for signifie...
+
+L'assembleur est clairement autovectorisé via -O2, faire du SIMD nous même n'apporterait probablement pas grand chose.
+
+### Conclusion encodeur
+Pour améliorer ce code, j'aurai fait dans l'ordre
+1. Skipper un quart ou un huitième ou plus des floats pour avoir une moyenne approchée qui peut tout à fait faire l'affaire sur 8820 valeurs...
+1. Explorer la piste du branchement pour faire max - min au lieu de `fabs`
+1. Explorer d'autres pistes comme le loop unrolling
