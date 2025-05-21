@@ -1,6 +1,6 @@
 
 CFLAGS=-std=c17 -O2 -march=native
-CFLAGS+=-g -Wall -Wextra -Wconversion -Wformat
+CFLAGS+=-g -ggdb -Wall -Wextra -Wconversion -Wformat
 
 
 all: build/ build/create-sample build/analyze
