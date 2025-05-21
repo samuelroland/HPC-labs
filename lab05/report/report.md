@@ -256,8 +256,8 @@ ce qui nous fait `100 + 8 + 24` = **132 bytes** par struct. On a 450 donc `450*1
 Inspectons les caches misses, il se trouve que cela n'est pas très impactant, j'en suis un peu étonné. On a 1.5 fois plus que la cache L1, mais cela ne produit que 2.44% de cache misses. Cela n'est pas très stable, cela varie entre 0.4% et 4%...
 
 ```sh
-> sudo perf stat -e L1-dcache-loads,L1-dcache-load-misses ./build/create-sample 3000000
- Performance counter stats for './build/analyze':
+> sudo perf stat -e L1-dcache-loads,L1-dcache-load-misses ./build/analyze
+Performance counter stats for './build/analyze':
 
      2,119,149,000      cpu_atom/L1-dcache-loads/                                               (0.41%)
      4,272,031,194      cpu_core/L1-dcache-loads/                                               (99.59%)
@@ -275,4 +275,73 @@ Pour améliorer ce code, j'aurai fait dans l'ordre
 1. Créer une structure hashmap ou tree map qui permet d'accéder en $O(1)$ amorti ou en $O(log(N))$ a une ville pour sa recherche, utilisée dans `getcity`
 
 ## Partie 2 - DTMF
+
+### Encoder
+Le fichier `txt/verylong.txt` contient 4000 caractères, une suite de dupliqué de l'alphabet supporté. J'utilise les flags suivant `set(CMAKE_C_FLAGS "-g -ggdb -fno-omit-frame-pointer -fno-inline -O2")`.
+
+```sh
+> sudo perf record --call-graph dwarf -e branch-misses,branches,cpu-cycles ./build/dtmf_encdec encode txt/verylong.txt output2.wav
+```
+
+![perf-three.png](imgs/perf-three.png)
+
+Le résultat est largement contraint par le temps de sauvegarde du fichier via ma fonction `write_wav_file`. `sf_open` et `sf_writef_float` prennent toute la proportion de cette fonctions, à ce stade, il n'y a probablement pas grand chose à optimiser autour puisque c'est 2 fonctions font partie de la librairie libsnd dont on a pas le contrôle direct.
+L'encodeur en lui même est à 4.46% de temps d'exécution.
+
+Voici les extraits utiles, les annotations ne concernent que `dtmf_encode`, il n'a pas trouvé audio.c mais cela nous arrange bien pour se concentrer sur le decode surlequel nous avons du contrôle.
+```sh
+> valgrind --tool=callgrind ./build/dtmf_encdec encode txt/verylong.txt output2.wav
+> callgrind_annotate --auto=yes --sort=Ir --show=Ir 
+...
+dans mix_frequency
+52   │ 18,918,892 (16.32%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/math/../sysdeps/ieee754/dbl-64/s_sin.c:__sin_fma (194,040x)
+...
+dans generate_all_frequencies_buffers
+103   │ 21,345,117 (18.41%)  => encoder.c:mix_frequency (97,020x)
+
+dans dtmf_encode
+139   │ 22,415,278 (19.33%)  => encoder.c:generate_all_frequencies_buffers (1x)
+...
+ 142   │    16,003 ( 0.01%)      for (int i = 0; i < text_length; i++) {
+ 143   │         .                   RepeatedBtn *btn = &repeated_btns_for_text[i];
+ 144   │    12,000 ( 0.01%)          float *src = freqs_buffers[btn->btn_index];
+ 145   │    50,900 ( 0.04%)          for (uint8_t j = 0; j < btn->repetition; j++) {
+ 146   │     6,300 ( 0.01%)              if (j > 0) cursor += SHORT_BREAK_SAMPLES_COUNT;// skipping short break silence between repeated tones
+ 147   │    51,504 ( 0.04%)              memcpy(cursor, src, TONE_SAMPLES_COUNT);
+ 148   │ 90,862,152 (78.37%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms (10,300x)
+```
+
+On voit que la majorité se passe sur les `memcpy` appelés **10,300 fois** qui visent à copier chaque son (chaque buffer de float pour 8820 samples), avec répétition quand nécessaire. Je me demande si le `__memcpy_avx_unaligned_erms` nous indiquerait pas que nous faisons des accès non alignés, et que nous pourrions gagner à prendre plus de place dans les tableaux derrière `freqs_buffers` pour être aligné ? Ou alors le soucis restera à cause du `cursor` qui sera forcément pas toujours aligné au fur et à mesure qu'on parcourt le fichier...
+
+Mon intuition était que ma fonction `char_to_repeated_btn` était le problème principale, au vu de tous ces branchements et calculs dupliqués pour les mêmes lettres.
+
+Petit extrait pour voir la tête du truc
+```c
+RepeatedBtn char_to_repeated_btn(char c) {
+    // Managing digits first
+    if (c >= '0' && c <= '9') {
+        char n = c - '0';
+        if (n == 0) {
+            return (RepeatedBtn) {.btn_index = 10, .repetition = 1};
+        } else {
+            return (RepeatedBtn) {.btn_index = n - 1, .repetition = 1};
+        }
+    }
+
+    // And all letters and special chars after
+    if (c >= 'a' && c <= 'r') {
+        return (RepeatedBtn) {.btn_index = (c - 'a') / 3 + 1,  // + 1 because the cell 0 doesn't have any letters
+                              .repetition = (c - 'a') % 3 + 2};// + 2 because we start at 2 repetition at minimum
+    } else if (c == 's') {
+        return (RepeatedBtn) {.btn_index = 6, .repetition = 5};
+...
+```
+Et bien il se trouve qu'elle ne prend qu'un infime partie du temps de calcul.
+```
+130   │    67,400 ( 0.06%)  => encoder.c:char_to_repeated_btn (4,000x)
+```
+
+Mais j'ai un doute sur cette mesure, peut-être que la fonction est trop courte et que sa mesure est biaisée mais pourtant ce n'est pas avec perf, il n'y a pas ce problème de sampling qui pourrait louper une partie des fonctions appelées.
+
+### Decode float buffer comparaison
 
