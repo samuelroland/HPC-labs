@@ -102,12 +102,98 @@ Performance counter stats for './build/create-sample 3000000':
 <not supported>      cpu_atom/L1-dcache-load-misses/ 
       2,320,184      cpu_core/L1-dcache-load-misses/  #  0.14% of all L1-dcache accesses   (98.64%)
 ```
+---
+
+Valgrind ne détecte pas de fuite de mémoire.
+```sh
+> valgrind ./build/create-sample 3000000
+==402997== Memcheck, a memory error detector
+==402997== Copyright (C) 2002-2024, and GNU GPL'd, by Julian Seward et al.
+==402997== Using Valgrind-3.24.0 and LibVEX; rerun with -h for copyright info
+==402997== Command: ./build/create-sample 3000000
+==402997== 
+Created 3000000 measurements in 16492.614000 ms
+==402997== 
+==402997== HEAP SUMMARY:
+==402997==     in use at exit: 0 bytes in 0 blocks
+==402997==   total heap usage: 3 allocs, 3 frees, 5,592 bytes allocated
+==402997== 
+==402997== All heap blocks were freed -- no leaks are possible
+==402997== 
+==402997== For lists of detected and suppressed errors, rerun with: -s
+==402997== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+```
+
+```sh
+valgrind --tool=callgrind  ./build/create-sample 3000000
+```
+
+En affichant seulement le nombre d'instructions executées, cette fois-ci on s'intéresse au nombre d'instructions executées et non aux cycles CPU passés, puisque Valgrind fait tourner notre code dans un "émulateur" de CPU, les mesures sont un peu différentes. Cela confirme les proportions de `fprintf` (85.6% proche de 70%) et de `rand_nd` et `rand`.
+```sh
+> callgrind_annotate --auto=yes --sort=Ir --show=Ir
+1,183,238 ( 0.13%)      for (int i = 0; i < n; i++) {
+4,338,536 ( 0.49%)          int c = rand() % ncities;
+22,468,759 ( 2.56%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdlib/rand.c:rand (394,412x)
+      677 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave (1x)
+1,577,648 ( 0.18%)          double measurement = rand_nd(data[c].mean, 10);
+94,152,695 (10.74%)  => create-sample.c:rand_nd (394,412x)
+2,366,476 ( 0.27%)          fprintf(fh, "%s;%.1f\n", data[c].city, measurement);
+750,484,526 (85.60%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdio-common/fprintf.c:fprintf (394,412x)
+```
+
+On obtient un total de **876,759,078** instructions executées au total.
+
+Le détails de l'annotation sur `rand_nd` est moins évidente, je n'ai pas réussi à faire en sorte d'avoir des calculs de pourcentage uniquement pour cette fonction. Les appels des fonction cos et sin (`__sin_fma` et `__cos_fma`) prennent chacune autour de 2%, si on additionne les pourcents au dessus de 1, on arrive vers les 10% pour toute la fonction `rand_nd` (`94,152,695 (10.74%)  => create-sample.c:rand_nd (394,412x)`), mais chacune de ses parties est assez courte, en gardant les calculs actuels, il parait difficile d'améliorer quoi que ce soit comme le temps est très réparti, une meilleure fonction `cos` si cela existe qui irait 2 fois plus vite, ne ferai gagner que 1% du total...
+
+```
+1,577,648 ( 0.18%)  double rand_nd(double mean, double stddev) {
+        .               static double U, V;
+        .               static int phase = 0;
+        .               double Z;
+        .           
+1,183,236 ( 0.13%)      if (phase == 0) {
+1,577,648 ( 0.18%)          U = (rand() + 1.) / (RAND_MAX + 2.);
+11,234,381 ( 1.28%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdlib/rand.c:rand (197,206x)
+1,380,442 ( 0.16%)          V = rand() / (RAND_MAX + 1.);
+11,234,380 ( 1.28%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdlib/rand.c:rand (197,206x)
+2,958,098 ( 0.34%)          Z = sqrt(-2 * log(U)) * sin(2 * M_PI * V);
+10,612,101 ( 1.21%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/math/./w_log_template.c:log@@GLIBC_2.29 (197,206x)
+17,614,635 ( 2.01%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/math/../sysdeps/ieee754/dbl-64/s_sin.c:__sin_fma (197,206x)
+    1,347 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave (2x)
+        .               } else {
+2,760,888 ( 0.31%)          Z = sqrt(-2 * log(U)) * cos(2 * M_PI * V);
+10,612,101 ( 1.21%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/math/./w_log_template.c:log@@GLIBC_2.29 (197,206x)
+18,249,807 ( 2.08%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/math/../sysdeps/ieee754/dbl-64/s_sin.c:__cos_fma (197,206x)
+      687 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave (1x)
+        .               }
+1,183,236 ( 0.13%)      phase = 1 - phase;
+        .           
+  788,824 ( 0.09%)      return Z * stddev + mean;
+1,183,236 ( 0.13%)  }
+```
+
+Je sais pas si ça se fait avec des fonctions de la libc, mais on pourrait aussi essayer d'inliner ces fonctions de math.
 
 ### Conclusion create-sample
 Pour améliorer ce code, j'aurai fait dans l'ordre
 1. Inliner à la main ou tester l'effet du mot clé `inline` sur `rand_nd`
 1. Utiliser un buffer beaucoup plus grand pour stocker les résultats à inscrire dans le fichier de sortie pour limiter un maximum les syscalls effectués pour write le fichier
 1. Utiliser un autre algorithme d'aléatoire
+1. Peut-être paralliser la génération pour découper le nombre total d'entrée à générer en plusieurs morceaux
+
+### analyze
+Pour gagner un peu de temps de recherche, je ne prends que 1 millions d'entrées.
+```sh
+> ./build/create-sample 1000000
+```
+
+Ce qui nous donne environ 488ms d'exécution.
+```sh
+> hyperfine ./build/analyze
+Benchmark 1: ./build/analyze
+  Time (mean ± σ):     488.9 ms ±  64.9 ms    [User: 485.2 ms, System: 2.8 ms]
+  Range (min … max):   331.2 ms … 546.9 ms    10 runs
+```
 
 ## Partie 2 - DTMF
 
