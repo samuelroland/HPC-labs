@@ -67,7 +67,7 @@ Created 3000020 measurements in 487.094000 ms
      0.489316098             10,153      raw_syscalls:sys_enter       
 ```
 
-8192 bytes c'est largement `40*1024*1024/8192` 5120 fois plus petit que le total à stocker. Si on augmente cette taille ou on gère nous même notre propre buffer, on pourrait grandement diminuer le nombre de syscall de sauvegarde de ces résultats. Au lieu de 10,153 syscalls, on pourrait en avoir moins d'une centaine, avec un buffer beaucoup plus grand, comme il n'y a très peu de syscalls autour, le gain de performance sera net!
+8192 bytes c'est largement `40*1024*1024/8192` 5120 fois plus petit que le total à stocker. Si on augmente cette taille ou on gère nous même notre propre buffer, on pourrait grandement diminuer le nombre de syscall de sauvegarde de ces résultats. Au lieu de 10,153 syscalls, on pourrait en avoir une dizaine, avec un buffer beaucoup plus grand, comme il n'y a très peu de syscalls autour, le gain de performance sera net! J'imagine que le cout d'allocation de 40MB ou une fraction de ceci, est moins chère que 10000 syscalls en trop.
 
 Par rapport au `rand()`, il y a probablement des meilleurs algorithmes d'aléatoire avec d'autres propriétés, ou des moyens de bidouiller pour faire un aléatoire avec des propriétés différentes. Par exemple, pour 3 millions d'éléments, comme en moyenne on va toucher chaque élément autant de fois, peut-être que les parcourir dans l'ordre sans aléatoire pour les 3/4 des tours pourraient être similaire en terme de probabilité ?
 
@@ -131,6 +131,7 @@ valgrind --tool=callgrind  ./build/create-sample 3000000
 En affichant seulement le nombre d'instructions executées, cette fois-ci on s'intéresse au nombre d'instructions executées et non aux cycles CPU passés, puisque Valgrind fait tourner notre code dans un "émulateur" de CPU, les mesures sont un peu différentes. Cela confirme les proportions de `fprintf` (85.6% proche de 70%) et de `rand_nd` et `rand`.
 ```sh
 > callgrind_annotate --auto=yes --sort=Ir --show=Ir
+...
 1,183,238 ( 0.13%)      for (int i = 0; i < n; i++) {
 4,338,536 ( 0.49%)          int c = rand() % ncities;
 22,468,759 ( 2.56%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdlib/rand.c:rand (394,412x)
@@ -143,9 +144,11 @@ En affichant seulement le nombre d'instructions executées, cette fois-ci on s'i
 
 On obtient un total de **876,759,078** instructions executées au total.
 
-Le détails de l'annotation sur `rand_nd` est moins évidente, je n'ai pas réussi à faire en sorte d'avoir des calculs de pourcentage uniquement pour cette fonction. Les appels des fonction cos et sin (`__sin_fma` et `__cos_fma`) prennent chacune autour de 2%, si on additionne les pourcents au dessus de 1, on arrive vers les 10% pour toute la fonction `rand_nd` (`94,152,695 (10.74%)  => create-sample.c:rand_nd (394,412x)`), mais chacune de ses parties est assez courte, en gardant les calculs actuels, il parait difficile d'améliorer quoi que ce soit comme le temps est très réparti, une meilleure fonction `cos` si cela existe qui irait 2 fois plus vite, ne ferai gagner que 1% du total...
+Les détails de l'annotation sur `rand_nd` est moins évidente, je n'ai pas réussi à faire en sorte d'avoir des calculs de pourcentage uniquement pour cette fonction. Les appels des fonction cos et sin (`__sin_fma` et `__cos_fma`) prennent chacune autour de 2%, si on additionne les pourcents au dessus de 1, on arrive vers les 10% pour toute la fonction `rand_nd` (`94,152,695 (10.74%)  => create-sample.c:rand_nd (394,412x)`). En gardant les calculs actuels, il parait difficile d'améliorer quoi que ce soit comme le temps est très réparti. Par exemple une meilleure fonction `cos` si cela existe qui irait 2 fois plus vite, ne ferai gagner que 1% du total...
 
-```
+```sh
+> callgrind_annotate --auto=yes --sort=Ir --show=Ir
+...
 1,577,648 ( 0.18%)  double rand_nd(double mean, double stddev) {
         .               static double U, V;
         .               static int phase = 0;
@@ -194,6 +197,82 @@ Benchmark 1: ./build/analyze
   Time (mean ± σ):     488.9 ms ±  64.9 ms    [User: 485.2 ms, System: 2.8 ms]
   Range (min … max):   331.2 ms … 546.9 ms    10 runs
 ```
+
+Je reprends les mêmes commandes qu'avant pour ce deuxième binaire.
+```sh
+> sudo perf record --call-graph dwarf -e cpu-cycles ./build/analyze
+```
+
+![perf-two.png](imgs/perf-two.png)
+
+Il se trouve que... sans grande surprise `getcity` prend une proportion complètement énorme du programme (82%). Ce n'est pas étonnant car son implémentation recherche une ville par son nom en parcourant le tableau de résultats, nous sommes en $O(N)$ avec N le nombre de villes au total (= aussi au nombre de résultats du coup). Et ce `getcity` est appelé pour chaque ligne. Ainsi l'implémentation est en $O(N*M)$ si M est le nombre de ligne. On voit que le prochain étage sur le flamegraph c'est le `__strcmp_avx2` au dessus de `getcity`, c'est cette comparaison de string qui prend le plus de temps au total, normal puisqu'on compare beaucoup de de noms de villes avant de trouver la bonne.
+
+A noter aussi le 3.74% de temps passé sur `fgets`, qui est appelé pour chaque ligne. Ce qui est très inefficace, on pourrait lire plusieurs lignes à la fois et juste déplacer notre pointeur avec la recherche du `;` sur le buffer. Le buffer a en plus une taille de 2^10 bytes, donc 1024 bytes pour stocker une cinquantaine de caractères... On pourrait largement en stocker moins.
+
+```sh
+valgrind --tool=callgrind ./build/analyze
+```
+
+Le code annoté confirme le temps important de `strcmp` dans `getcity`
+```sh
+> callgrind_annotate --auto=yes --sort=Ir --show=Ir
+...
+            .           static int getcity(const char *city, struct result results[], int nresults) {
+  622,152,194 ( 8.51%)      for (int i = 0; i < nresults; i++) {
+1,657,402,143 (22.68%)          if (strcmp(results[i].city, city) == 0) {
+4,141,006,380 (56.66%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/strcmp-avx2.S:__strcmp_avx2 (207,050,319x)
+          720 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave (1x)
+            .                       return i;
+            .                   }
+            .               }
+            .           
+            .               return -1;
+            .           }
+
+```
+
+On trouve aussi `strtod` le parsing du string representant un float vers un float.
+```
+...
+    5,000,004 ( 0.07%)          double measurement = strtod(pos + 1, NULL);
+  661,529,913 ( 9.05%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/stdlib/strtod.c:strtod (1,000,000x)
+```
+
+
+La taille de la struct est de
+```c
+struct result {
+    char city[100]; // 100 * 1
+    int count; // + 4 + 4 de padding
+    double sum, min, max; // 3 *8
+};
+
+...
+struct result results[450];
+```
+
+ce qui nous fait `100 + 8 + 24` = **132 bytes** par struct. On a 450 donc `450*132` = **59400 bytes**, ce qui dépasse les 32KB de cache L1 (59400 > 32*1024 = 32768)!!
+
+Inspectons les caches misses, il se trouve que cela n'est pas très impactant, j'en suis un peu étonné. On a 1.5 fois plus que la cache L1, mais cela ne produit que 2.44% de cache misses. Cela n'est pas très stable, cela varie entre 0.4% et 4%...
+
+```sh
+> sudo perf stat -e L1-dcache-loads,L1-dcache-load-misses ./build/create-sample 3000000
+ Performance counter stats for './build/analyze':
+
+     2,119,149,000      cpu_atom/L1-dcache-loads/                                               (0.41%)
+     4,272,031,194      cpu_core/L1-dcache-loads/                                               (99.59%)
+   <not supported>      cpu_atom/L1-dcache-load-misses/                                       
+       104,350,491      cpu_core/L1-dcache-load-misses/  #    2.44% of all L1-dcache accesses   (99.59%)
+```
+
+Il se trouve que les villes de notre dataset ne dépasse pas 26 caractères de long. On pourrait très bien diminuer cette valeur à 30 et on gagnerait un tiers de mémoire, et cela impacte le résultat. Si on passe `char city[30];`, on obtient de manière beaucoup plus stable `0.02%` ou `0.03%`, ce qui est un gain notable. La mesure de différence de temps est trop instable pour être relevée.
+
+A noter en plus que c'est juste le niveau suivant de cache L2 qui prendra la relève...
+
+### Conclusion analyze
+Pour améliorer ce code, j'aurai fait dans l'ordre
+1. Réduire la taille de plusieurs buffers à quelque chose de plus réaliste
+1. Créer une structure hashmap ou tree map qui permet d'accéder en $O(1)$ amorti ou en $O(log(N))$ a une ville pour sa recherche, utilisée dans `getcity`
 
 ## Partie 2 - DTMF
 
