@@ -3,9 +3,10 @@
 // This code is made of 2 implementation, one basic and a second one with SIMD
 #include <assert.h>
 #include <immintrin.h>
+#include <stdio.h>
 #include <stdlib.h>
 
-// #define CODE_VERSION 2// 1 is normal, 2 is SIMD
+#define CODE_VERSION 2// 1 is normal, 2 is SIMD
 #if CODE_VERSION == 1
 int benchmark(int size) {
     float *bigBuffer = malloc(size * sizeof(float));
@@ -30,16 +31,18 @@ int benchmark(int size) {
 int benchmark(int size) {
     float *bigBuffer = malloc(size * sizeof(float));
     if (!bigBuffer) return 0;
-    __m256 accumulator;
-    _mm256_set1_ps(0);
+    for (int i = 0; i < size; i++) {
+        bigBuffer[i] = 1;
+    }
+
+    __m256 accumulator = _mm256_set1_ps(0);
     int incr = 8;// 8 float per 256 bits registers
-    int halfincr = 4;
     int partialMaximum = size - (size % incr);
 
     float *ptr = bigBuffer;
     float sum = 0;
-    for (int i = 0; i < partialMaximum; i++) {
-        __m256 current8floats = _mm256_loadu2_m128(ptr, ptr + halfincr);
+    for (int i = 0; i < partialMaximum; i += incr) {
+        __m256 current8floats = _mm256_loadu_ps(ptr);
         accumulator = _mm256_add_ps(current8floats, accumulator);
     }
 
@@ -59,9 +62,6 @@ int benchmark(int size) {
     return sum;// it will convert to int, as we want a round value to compare with that's good
 }
 #endif
-
-#include <stdio.h>
-#include <stdlib.h>
 
 int main(int argc, char *argv[]) {
     int MB_size;
