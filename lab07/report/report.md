@@ -166,6 +166,34 @@ avec celui-ci, même plus besoin de copier les k caractères, on peut juste les 
     }
 ```
 
+A ce point, les temps des 2 versions avaient augmentés sur machine (sans explication particulière) j'ai relancé pour les 2 versions.
+
+Avant changement, **13.156s**
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
+  Time (mean ± σ):     13.156 s ±  0.350 s    [User: 13.092 s, System: 0.021 s]
+  Range (min … max):   12.804 s … 13.505 s    3 runs
+```
+
+Après changement, on passe à **11.492s**
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
+  Time (mean ± σ):     11.492 s ±  0.131 s    [User: 11.445 s, System: 0.007 s]
+  Range (min … max):   11.383 s … 11.638 s    3 runs
+```
+
+On observe maintenant que les `lseek` ont bien été remplacé par quelques `mremap` bien moins nombreux.
+```
+read(3, "43247233888452153437272501285897"..., 1696) = 1696
+mmap(NULL, 100000, PROT_READ, MAP_PRIVATE, 3, 0) = 0x7f3e00c65000
+mmap(NULL, 217088, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7f3e00a26000
+mremap(0x7f3e00a26000, 217088, 430080, MREMAP_MAYMOVE) = 0x7f3e009bd000
+mremap(0x7f3e009bd000, 430080, 856064, MREMAP_MAYMOVE) = 0x7f3e008ec000
+mremap(0x7f3e008ec000, 856064, 1708032, MREMAP_MAYMOVE) = 0x7f3e0074b000
+mremap(0x7f3e0074b000, 1708032, 3411968, MREMAP_MAYMOVE) = 0x7f3e0040a000
+mremap(0x7f3e0040a000, 3411968, 6819840, MREMAP_MAYMOVE) = 0x7f3dffd89000
+```
+
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
 mmap, munmap - map or unmap files or devices into memory
