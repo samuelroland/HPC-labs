@@ -23,16 +23,13 @@ void init_kmer_table(KmerTable *table) {
 
 void read_kmer(FILE *f, long position, int k, char *kmer) {
     fseek(f, position, SEEK_SET);
-    for (int i = 0; i < k; i++) {
-        int c = fgetc(f);
-        if (c == EOF) {
-            fprintf(stderr, "Error: Reached end of file before reading k-mer.\n");
-            fclose(f);
-            exit(1);
-        }
-        kmer[i] = (char) c;
+    int n = fread(kmer, sizeof(char), k, f);
+    if (n != k) {
+        fprintf(stderr, "Error: Reached end of file before reading k-mer.\n");
+        fprintf(stderr, "position = %li, kmer = %s, n = %d\n", position, kmer, n);
+        fclose(f);
+        exit(1);
     }
-    kmer[k] = '\0';
 }
 
 void add_kmer(KmerTable *table, const char *kmer) {
@@ -66,7 +63,7 @@ int main(int argc, char **argv) {
     const char *input_file = argv[1];
     int k = atoi(argv[2]);
     char kmer[MAX_KMER];
-
+    kmer[k] = '\0';
 
     if (k <= 0) {
         fprintf(stderr, "Error: k must be a positive integer.\n");
