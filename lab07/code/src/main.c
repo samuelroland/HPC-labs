@@ -21,12 +21,7 @@ void init_kmer_table(KmerTable *table) {
     table->entries = NULL;
 }
 
-void read_kmer(const char *filename, long position, int k, char *kmer) {
-    FILE *f = fopen(filename, "r");
-    if (!f) {
-        perror("Error opening file");
-        exit(1);
-    }
+void read_kmer(FILE *f, long position, int k, char *kmer) {
     fseek(f, position, SEEK_SET);
     for (int i = 0; i < k; i++) {
         int c = fgetc(f);
@@ -35,10 +30,9 @@ void read_kmer(const char *filename, long position, int k, char *kmer) {
             fclose(f);
             exit(1);
         }
-        kmer[i] = (char)c;
+        kmer[i] = (char) c;
     }
     kmer[k] = '\0';
-    fclose(f);
 }
 
 void add_kmer(KmerTable *table, const char *kmer) {
@@ -87,15 +81,16 @@ int main(int argc, char **argv) {
 
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
-    fclose(file);
 
     KmerTable table;
     init_kmer_table(&table);
 
     for (long i = 0; i <= file_size - k; i++) {
-        read_kmer(input_file, i, k, kmer);
+        read_kmer(file, i, k, kmer);
         add_kmer(&table, kmer);
     }
+
+    fclose(file);
 
     printf("Results:\n");
     for (int i = 0; i < table.count; i++) {
