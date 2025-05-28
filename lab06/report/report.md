@@ -27,7 +27,7 @@ Ou la version SIMD
 
 J'ai activée les flags `-O2 -g -ggdb -Wall -fno-tree-vectorize` pour éviter les autovectorisations mais optimiser un minimum. Il y a en plus `-mavx2` pour la version SIMD pour accéder aux intrinsèques.
 
-J'ai prise une taille de 100000000 = 100millions de float = 400millions de bytes par défaut, mais celle-ci peut être changer en premier argument du programme, par ex.
+J'ai prise une taille de 10000000 = 10millions de float = 40millions de bytes par défaut, mais celle-ci peut être changer en premier argument du programme, par ex.
 
 ```sh
 ./build/floatsparty_basic 1212
@@ -91,5 +91,20 @@ Average for simd: 2.25 joules
 > measure basic && sleep 1 && measure simd
 Average for basic: 2.31 joules
 Average for simd: 2.33 joules
+```
+
+C'est un peu déroutant ces mesures... Si je devais coder des améliorations j'aurai pas mal de peine à être sûr de l'amélioration.
+
+## Marqueurs avec perf
+Pareil qu'avant, mais avec beaucoup plus de galère à automatiser à cause du passage en sudo de perf qui m'a fait perdre du temps de debug au niveau du script, avec les fd qui générait des "Bad file descriptor", parce que ça changeait d'utilisateur j'imagine ? A nouveau `source measure2.fish` va utiliser `perf-markers.sh`
+
+Parfois la différence est minime, parfois elle est plus notable au niveau du gain. Je suis resté sur une moyenne avec 40 itérations.
+```sh
+> measure2 basic && sleep 1 && measure2 simd
+Average for basic: .084915 joules
+Average for simd: .085324 joules
+> measure2 basic && sleep 1 && measure2 simd
+Average for basic: .091502 joules
+Average for simd: .086419 joules
 ```
 
