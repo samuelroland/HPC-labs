@@ -113,6 +113,59 @@ void read_kmer(FILE *f, long position, int k, char *kmer) {
 }
 ```
 
+Etonnement retirer le branchement, s'avère pire en moyenne et on a nouveau cette large plage de plus ou moins... Je n'arrive pas à comprendre le sens de cette histoire, c'est étrange. J'ai fixé sur le coeur 3 pour limiter les différences.
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
+  Time (mean ± σ):     11.157 s ±  1.338 s    [User: 11.100 s, System: 0.016 s]
+  Range (min … max):   10.287 s … 12.698 s    3 runs
+```
+
+J'ai aussi inliné la fonction comme elle était trop courte et probablement déjà inliné par `-O2` et plus simple à gérer sur place.
+
+#### fseek+fread à mmap
+Je n'étais pas sûr du fonctionnement de fseek, s'il était possible de "déplacer le curseur" sans faire de syscall, j'ai fait un programme séparé pour pouvoir compter les syscalls séparement.
+```c
+#include <stdio.h>
+
+int main(int argc, char *argv[]) {
+    char kmer[100];
+    FILE *file = fopen("100k.txt", "r");
+    fseek(file, 0, SEEK_END);
+    int size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    for (long i = 0; i <= size - 3; i++) {
+        fseek(file, i, SEEK_SET);
+        fread(kmer, sizeof(char), 3, file);
+    }
+    fclose(file);
+    return 0;
+}
+```
+
+On voit clairement que le syscall lseek est appelé à chaque appel de `fseek` puisqu'il y a le même nombre que de caractères.
+```sh
+> strace ./build/main &| grep lseek | wc -l
+100000
+```
+
+Conclusion: se déplacer via le curseur de l'OS est probablement une très mauvaise idée comme il serait possible de déplacer un pointeur coté user space pour faire pareil. On pourrait lire tout le fichier une fois avec `fread` mais je vais partir sur `mmap` que je ne connais pas encore.
+
+Ainsi après mappage dans le pointeur `content`, on peut changer ce morceau
+```c
+    for (long i = 0; i <= file_size - k; i++) {
+        fseek(file, i, SEEK_SET);
+        fread(kmer, sizeof(char), k, file);
+
+        add_kmer(&table, kmer);
+    }
+```
+avec celui-ci, même plus besoin de copier les k caractères, on peut juste les référencer et ajouter la taille `k` à `add_kmer`
+```c
+    for (long i = 0; i <= file_size - k; i++) {
+        add_kmer(&table, content + i, k);
+    }
+```
+
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
 mmap, munmap - map or unmap files or devices into memory
