@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
     int MB_size;
     if (argc < 2) {
         printf("Taking default value for size of float buffer\n");
-        MB_size = 10000000;// 10millions of float = 40millions of bytes
+        MB_size = 100000000;// 100millions of float = 400millions of bytes
     } else {
         MB_size = atoi(argv[1]);
     }
