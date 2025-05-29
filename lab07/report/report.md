@@ -339,25 +339,20 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Range (min … max):    1.003 s …  1.029 s    10 runs
 ```
 
-Cette fois-ci, la stratégie de skipper le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms.
+Cette fois-ci, la stratégie de skipper le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms, nous sommes maintenant à **884.0ms**.
 
 ```sh
 Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
-  Time (mean ± σ):     888.7 ms ±  47.4 ms    [User: 879.2 ms, System: 6.1 ms]
-  Range (min … max):   839.8 ms … 992.3 ms    10 runs
+  Time (mean ± σ):     834.5 ms ±   3.7 ms    [User: 827.2 ms, System: 5.0 ms]
+  Range (min … max):   828.4 ms … 839.0 ms    10 runs
 ```
 
-## TODO
-explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
-mmap, munmap - map or unmap files or devices into memory
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
 * Une analyse des performances de votre version mono-threadée.
-* Une description de la stratégie de parallélisation mise en œuvre : répartition du travail
-entre threads, traitement des cas limites, zones de chevauchement, etc.
-* Une comparaison détaillée entre les performances des versions mono et multithreadée
-(temps d’exécution, scalabilité, goulots d’étranglement...).
+* Une description de la stratégie de parallélisation mise en œuvre : répartition du travail entre threads, traitement des cas limites, zones de chevauchement, etc.
+* Une comparaison détaillée entre les performances des versions mono et multithreadée (temps d’exécution, scalabilité, goulots d’étranglement...).
 
 ## Deuxième partie — Activité DTMF :
 * Une description de la partie de votre code qui a été parallélisée.

@@ -43,25 +43,36 @@ function run
 end
 
 color blue "Starting regressions tests"
-if test "$argv[1]" = full
-    for count in $counts
+if ! test "$argv[1]" = justbench
+    if test "$argv[1]" = full
+        for count in $counts
+            for file in $files
+                if ! run $file $count
+                    echo regressions detected !!
+                    return
+                end
+            end
+        end
+    else
         for file in $files
-            if ! run $file $count
+            if ! run $file $QUICK_TEST_COUNT
                 echo regressions detected !!
                 return
             end
         end
     end
-else
-    for file in $files
-        if ! run $file $QUICK_TEST_COUNT
-            echo regressions detected !!
-            return
-        end
-    end
 end
 
-color green "Starting regressions tests"
-echo "Regression tests passed !"
+color green "Regression tests passed !"
 
-hyperfine "taskset -c 3 ./build/k-mer data/100k.txt $QUICK_TEST_COUNT"
+# hyperfine -r 4 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/100k.txt $QUICK_TEST_COUNT"
+
+for c in 2 3 4
+    hyperfine -r 5 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/1m.txt $c"
+    hyperfine -r 5 "taskset -c 3 ./build/k-mer data/1m.txt $c"
+end
+
+for c in 5 6 7 8 10 20 55 64
+    hyperfine -r 4 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/100k.txt $c"
+    hyperfine -r 4 "taskset -c 3 ./build/k-mer data/100k.txt $c"
+end
