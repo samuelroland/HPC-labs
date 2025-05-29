@@ -347,6 +347,8 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Range (min … max):   828.4 ms … 839.0 ms    10 runs
 ```
 
+Je me suis rendu compte une heure plus tard que la stratégie en elle-même est incorrecte, car cela considère `Za` et `za` pareil, puisque je mets en minuscule le première caractère pour choisir la `KmerTable` pour `z` et `Z`, je ne peux pas ignorer le premier caractère au final. J'ai rétabli mon changement.
+
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.

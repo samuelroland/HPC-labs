@@ -33,11 +33,11 @@ void init_kmer_table(KmerTable *table) {
     table->entries = NULL;
 }
 
-void add_kmer(KmerTable *table, const char *kmer, const int k, u_int8_t firstCharsValidCount) {
+void add_kmer(KmerTable *table, const char *kmer, const int k) {
     KmerEntry *entries = table->entries;
     for (int i = 0; i < table->count; i++) {
         bool match = true;
-        for (size_t j = firstCharsValid; j < k; j++) {
+        for (size_t j = 0; j < k; j++) {
             if (entries[i].kmer[j] != kmer[j]) {
                 match = false;
                 break;
@@ -106,18 +106,16 @@ int main(int argc, char **argv) {
         // Pick among one of the 37 available subtable
         char firstChar = tolower(content[i]);
         KmerTable *subtable = NULL;
-        u_int8_t firstCharsValidCount = 1;
         if (firstChar >= '0' && firstChar <= '9') {
             subtable = tables.numbers + (firstChar - '0');// get the table of the first digit
         } else if (firstChar >= 'a' && firstChar <= 'z') {
             subtable = tables.letters + (firstChar - 'a');// get the table of the first letter
         } else {
             subtable = &tables.rest;
-            firstCharsValidCount = 0;
         }
 
         // Research in this subtable or insert it at the end
-        add_kmer(subtable, content + i, k, firstCharsValidCount);
+        add_kmer(subtable, content + i, k);
     }
 
     // Show the results and free entries list as we go

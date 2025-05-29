@@ -39,7 +39,7 @@ function run
         color red "Error: file expected/$file.sorted.txt should exist, run `fish tests.fish base`"
         return 2
     end
-    # delta gen/$file.sorted.txt expected/$file.sorted.txt
+    delta gen/$file.sorted.txt expected/$file.sorted.txt
 end
 
 color blue "Starting regressions tests"
