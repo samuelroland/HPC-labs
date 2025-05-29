@@ -251,7 +251,7 @@ J'avais fait l'hypothèse à la première lecture que le `realloc` allait valoir
 ```c
   63   │       1,669 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/malloc/malloc.c:realloc (11x)
 ```
-
+TODO: tester avec plus grand > 3 ! maybe ce realloc prend de l'ampleur à ce moment avec beaucoup plus d'entrées.
 
 Benchmark actuel
 ```
@@ -262,7 +262,7 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
 
 A cause de cette algorithme en $O(N)$, on doit constamment parcourir une grande partie de la liste avant de trouver l'entrée en question ou arriver tout au bout pour se rendre compte qu'elle n'existe pas. Plus `k` est grand, plus la probabilité est élevée que le mot ne se trouve pas dans la liste et que cette liste soit grande, et que le parcours se fasse en entier. Ce qui explique le temps augmenté plus `k` est grand.
 
-On pourrait tenter d'implémenter ou d'importer une implémenation d'un arbre binaire, qui nous permettrait de faire de rechercher en $O(log(N))$, nous allons essayer de découper en plusieurs morceaux la liste en fonction du premier charactère. J'ai séparé les 10 numéros, des lettres et du reste:
+On pourrait tenter d'implémenter ou d'importer une implémenation d'un arbre binaire, qui nous permettrait de faire de rechercher en $O(log(N))$, ou d'une hashmap pour avoir du $O(1)$ amorti. Nous allons essayer de découper en plusieurs morceaux la liste en fonction du premier charactère. J'ai séparé les 10 numéros, des lettres et du reste:
 
 ```c
 #define LETTERS_COUNT 26
@@ -274,7 +274,7 @@ typedef struct {
 } KmerTables;
 ```
 
-Comme le benchmark ici ne traite que des nombres, on peut s'imaginer une réduction d'environ 10 fois le temps total, puisque les listes sont remplis assez équitablement. La preuve avec ce dataset, le nombre d'entrées par premier caractère est très proche.
+Comme le benchmark ici ne traite que des nombres, on peut s'imaginer une réduction d'environ 10 fois le temps total, puisque les listes sont remplis assez équitablement. La preuve avec ce dataset, le nombre d'entrées par premier caractère est très proche (exemple: il y a `10137` k-mers de avec `k=10` qui commencent par `1`)
 ```
 0 9999
 1 10137
@@ -288,16 +288,46 @@ Comme le benchmark ici ne traite que des nombres, on peut s'imaginer une réduct
 9 9901
 ```
 
+Le code nécessite plus de boucles d'initialisations et d'affichage des résultats, en plus d'une partie de "routing" vers la bonne sous table
 
-Et c'est effectivement dans le l'ordre 10x qu'on obtient maintenant **1.143s** !!
+```c
+// Pick among one of the 37 available subtable
+char firstChar = tolower(content[i]);
+KmerTable *subtable = NULL;
+if (firstChar >= '0' && firstChar <= '9') {
+    subtable = tables.numbers + (firstChar - '0');// get the table of the first digit
+} else if (firstChar >= 'a' && firstChar <= 'z') {
+    subtable = tables.letters + (firstChar - 'a');// get the table of the first letter
+} else {
+    subtable = &tables.rest;
+}
+```
+Et c'est effectivement de l'ordre 10x qu'on obtient maintenant **1.143s** !!
 ```
 Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Time (mean ± σ):      1.143 s ±  0.011 s    [User: 1.133 s, System: 0.006 s]
   Range (min … max):    1.128 s …  1.159 s    10 runs
 ```
 
-TODO: tester avec plus grand > 3 ! maybe ce realloc prend de l'ampleur à ce moment avec beaucoup plus d'entrées.
+**Repassons un coup de profiling**
+On voit que le code en plus autour de `add_kmer` n'est pas devenu significatif, on passe de 99.8% à 98.3% seulement.
+```c
+ 289   │ 166,969,262 (98.31%)  => src/main.c:add_kmer (99,998x)
+```
 
+C'est toujours la partie recherche et comparaison de strings qui prend la plus grande proportion.
+```c
+ 200   │ 35,107,139 (20.67%)          if (memcmp(table->entries[i].kmer, kmer, k) == 0) {
+ 201   │ 114,031,336 (67.14%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe (5,015,305x)
+```
+
+Je me demande si en évitant de comparer un caractère (le tout premier qui est déjà égal) dans le cas des lettres et nombres (pas du reste par contre), si on peut gagner du temps ou pas. Eh bien, il se trouve que non, on perd +30ms au lieu d'en gagner.
+
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
+  Time (mean ± σ):      1.179 s ±  0.006 s    [User: 1.170 s, System: 0.005 s]
+  Range (min … max):    1.171 s …  1.192 s    10 runs
+```
 
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
