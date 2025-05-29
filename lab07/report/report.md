@@ -339,7 +339,13 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Range (min … max):    1.003 s …  1.029 s    10 runs
 ```
 
+Cette fois-ci, la stratégie de skippé le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms.
 
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
+  Time (mean ± σ):     888.7 ms ±  47.4 ms    [User: 879.2 ms, System: 6.1 ms]
+  Range (min … max):   839.8 ms … 992.3 ms    10 runs
+```
 
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
