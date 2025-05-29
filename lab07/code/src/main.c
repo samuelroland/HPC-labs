@@ -10,7 +10,7 @@
 
 typedef struct {
     int count;
-    char kmer[MAX_KMER];
+    char kmer[MAX_KMER] __attribute__((aligned(8)));
 } KmerEntry;
 
 typedef struct {
@@ -35,18 +35,50 @@ void init_kmer_table(KmerTable *table) {
 
 void add_kmer(KmerTable *table, const char *kmer, const int k) {
     KmerEntry *entries = table->entries;
-    for (int i = 0; i < table->count; i++) {
-        bool match = true;
-        for (size_t j = 0; j < k; j++) {
-            if (entries[i].kmer[j] != kmer[j]) {
-                match = false;
-                break;
-            }
+    size_t tableCount = table->count;
+    if (k >= 4) {
+        // This pattern is very similar to SIMD pattern, just by comparing 8 bytes and 4 bytes at a time instead of one after another.
+        u_int8_t rest8 = 0;
+        u_int8_t rest4 = 0;
+        if (k >= 8) {
+            rest8 = k - (k % 8);
         }
+        rest4 = k - (k % 4);
 
-        if (match) {
+        for (int i = 0; i < tableCount; i++) {
+            // Manage first part that is multiple of 8 with longs comparison
+            for (size_t j = 0; j < rest8; j += 8)
+                // Note: this hard to read line just compare the 8 bytes from left to right
+                if (*(const u_int64_t *) (entries[i].kmer + j) != *(const u_int64_t *) (kmer + j))
+                    goto next_round;
+
+            // Manage multiple of 4 (only one round, precedent rounds would be made by previous loop for 8 multiple)
+            if (rest8 < rest4)
+                // Note: this hard to read line just compare the 4 bytes from left to right
+                if (*(const u_int32_t *) (entries[i].kmer + rest8) != *(const u_int32_t *) (kmer + rest8))
+                    goto next_round;
+
+            // Manage the rest (< 4 chars)
+            for (size_t j = rest4; j < k; j++)
+                if (entries[i].kmer[j] != kmer[j])
+                    goto next_round;
+
             entries[i].count++;
             return;
+        next_round:
+        }
+        // TODO: fix warning about C23 extension ???
+    } else {
+        // normal execution for k < 4, compare each character one by one
+        // This is separated from above to avoid the unnecessary branching overhead
+        for (int i = 0; i < tableCount; i++) {
+            for (size_t j = 0; j < k; j++)
+                if (entries[i].kmer[j] != kmer[j])
+                    goto next_round2;
+
+            entries[i].count++;
+            return;
+        next_round2:
         }
     }
 

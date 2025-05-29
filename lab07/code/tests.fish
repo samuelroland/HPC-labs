@@ -49,7 +49,7 @@ if ! test "$argv[1]" = justbench
             for file in $files
                 if ! run $file $count
                     echo regressions detected !!
-                    return
+                    return 2
                 end
             end
         end
@@ -65,14 +65,44 @@ end
 
 color green "Regression tests passed !"
 
+set RESULT_FILE results.md
+
+
 # hyperfine -r 4 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/100k.txt $QUICK_TEST_COUNT"
 
-for c in 2 3 4
-    hyperfine -r 5 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/1m.txt $c"
-    hyperfine -r 5 "taskset -c 3 ./build/k-mer data/1m.txt $c"
+echo """
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |""" >$RESULT_FILE
+
+function append_results
+    set count $argv[1]
+    set file $argv[2]
+
+    echo -n "|**$count**|`$file`" >>$RESULT_FILE
+    set beforetime (jq .results[0].mean < out.json)
+    set aftertime (jq .results[0].mean < out2.json)
+    printf "|%.4fs" $beforetime >>$RESULT_FILE
+    printf "|%.4fs" $aftertime >>$RESULT_FILE
+    set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
+    printf "|%.2fx|\n" $factor >>$RESULT_FILE
+    color green "Factor of $factor"
 end
 
-for c in 5 6 7 8 10 20 55 64
-    hyperfine -r 4 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/100k.txt $c"
-    hyperfine -r 4 "taskset -c 3 ./build/k-mer data/100k.txt $c"
+set beforebin k-mer-before-memcmp-opti
+set file 1m.txt
+for count in 1 2 3 4
+    hyperfine -r 10 -N --warmup 3 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
+    hyperfine -r 10 -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
+    append_results $count $file
 end
+
+set file 100k.txt
+for count in 5 6 7 8 10 20 55 64
+    hyperfine -r 1 --warmup 1 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
+    hyperfine -r 1 "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
+    append_results $count $file
+end
+
+glow $RESULT_FILE
+echo
+cat $RESULT_FILE

@@ -350,6 +350,30 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
 Je me suis rendu compte une heure plus tard que la stratégie en elle-même est incorrecte, car cela considère `Za` et `za` pareil, puisque je mets en minuscule le première caractère pour choisir la `KmerTable` pour `z` et `Z`, je ne peux pas ignorer le premier caractère au final. J'ai rétabli mon changement.
 
 
+#### Optimisation des comparaisons de groupe de 8 et 4 caractères
+En fait, la majorité du temps étant passée à comparer des strings, il est encore possible d'améliorer la performance en comparaison plus qu'un seul caractère à la fois ! Dans la même idée que le pattern du code SIMD, si `k=21`, on peut comparer 2 fois 8 bytes en les considérant comme deux `u_int64_t`, puis les bytes 17 à 21 il reste 4 bytes à comparer en considérant un `u_int32_t` puis finalement le dernier byte à gérer tout seul comme au départ.
+
+J'ai séparé le code en 2 cas, si `k<4`, rien ne sert d'ajouter de l'overhead de branches qui seront fausses dans tous les cas, je garde le code de départ. Pour tous les autres cas, on essaie de comparer à un multiple de 8 et 4 pour faire le plus possible de comparaisons en `u_int64_t` puis gérer le reste.
+
+En théorie, si `k>=8`, on devrait avoir un peu moins de 8 fois d'accéleration, un peu moins parce qu'il y a un certain overhead non négligeabl de mise en place de ces boucles. Si `4 <= k < 8`, on devrait avoir également un facteur 4.
+
+L'implémentation a eu plusieurs bug de logiques, qui ont heureusement pu être attrapée par le système de tests anti-regression, qui vérifie que la sortie triée est la même qu'au départ sur tous les fichiers (`1k 10k 100k en.big`) et plusieurs `k` (`1 2 3 5 10 20 50 98`).
+
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1m.txt`|0.0029s|0.0030s|0.96x|
+|**2**|`1m.txt`|0.0163s|0.0154s|1.05x|
+|**3**|`1m.txt`|0.0812s|0.0879s|0.92x|
+|**4**|`1m.txt`|0.8569s|0.2567s|3.33x|
+|**5**|`100k.txt`|0.5642s|0.2596s|2.17x|
+|**6**|`100k.txt`|0.9542s|0.5007s|1.90x|
+|**7**|`100k.txt`|1.1105s|0.5436s|2.04x|
+|**8**|`100k.txt`|1.0841s|0.5400s|2.00x|
+|**10**|`100k.txt`|1.0346s|0.5363s|1.92x|
+|**20**|`100k.txt`|1.0344s|0.5404s|1.91x|
+|**55**|`100k.txt`|1.0335s|0.5398s|1.91x|
+|**64**|`100k.txt`|1.0266s|0.6910s|1.48x|
+
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
 * Une analyse des performances de votre version mono-threadée.
