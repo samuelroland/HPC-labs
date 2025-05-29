@@ -339,7 +339,7 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Range (min … max):    1.003 s …  1.029 s    10 runs
 ```
 
-Cette fois-ci, la stratégie de skippé le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms.
+Cette fois-ci, la stratégie de skipper le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms.
 
 ```sh
 Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
