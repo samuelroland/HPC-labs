@@ -194,6 +194,23 @@ mremap(0x7f3e0074b000, 1708032, 3411968, MREMAP_MAYMOVE) = 0x7f3e0040a000
 mremap(0x7f3e0040a000, 3411968, 6819840, MREMAP_MAYMOVE) = 0x7f3dffd89000
 ```
 
+#### Optimistaion de add_kmer par profiling
+```sh
+sam@sxp ~/H/y/H/H/l/code (main)> sudo perf record -e cycles --call-graph dwarf ./build/k-mer data/100k.txt 10
+> sudo perf annotate --stdio --source --dsos=./build/k-mer
+Error:
+The perf.data data has no samples!
+```
+TODO ne marche pas pourquoi ?!
+sudo dnf debuginfo-install glibc
+sudo dnf debuginfo-install libstdc++
+
+Je vais passer un coup de profiling pour voir où est passé le plus de temps dans `add_kmer`, pour voir dans quelle direction améliorer pour commencer.
+Todo: expliquer perf annotate marche pas
+```sh
+valgrind --tool=callgrind ./build/k-mer data/100k.txt 10
+```
+
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
 mmap, munmap - map or unmap files or devices into memory
