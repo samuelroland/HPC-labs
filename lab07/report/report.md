@@ -329,6 +329,18 @@ Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
   Range (min … max):    1.171 s …  1.192 s    10 runs
 ```
 
+Je ne garde donc pas ce changement.
+
+J'ai essayé ensuite d'implémenter moi-même le `memcmp` pour éviter l'appel de la fonction et on obtient encore un léger gain de **168ms** avec **1.011s**
+
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
+  Time (mean ± σ):      1.011 s ±  0.008 s    [User: 1.002 s, System: 0.006 s]
+  Range (min … max):    1.003 s …  1.029 s    10 runs
+```
+
+
+
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
 mmap, munmap - map or unmap files or devices into memory

@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,9 +33,18 @@ void init_kmer_table(KmerTable *table) {
 }
 
 void add_kmer(KmerTable *table, const char *kmer, const int k) {
+    KmerEntry *entries = table->entries;
     for (int i = 0; i < table->count; i++) {
-        if (memcmp(table->entries[i].kmer, kmer, k) == 0) {
-            table->entries[i].count++;
+        bool match = true;
+        for (size_t j = 0; j < k; j++) {
+            if (entries[i].kmer[j] != kmer[j]) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match) {
+            entries[i].count++;
             return;
         }
     }
