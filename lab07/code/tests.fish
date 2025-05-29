@@ -2,8 +2,15 @@ cmake . -Bbuild && cmake --build build/ -j 8
 or return
 
 # clear
+set count 10
 
-hyperfine -r 3 'taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt'
+./build/k-mer data/100k.txt $count >gen/100k.txt
+sort gen/100k.txt >gen/100k.sorted.txt
+delta gen/100k.sorted.txt expected/100k.sorted.txt
+or begin
+    echo regressions detected !!
+    return
+end
+echo "Same result generated !"
 
-delta gen/100k.txt expected/100k.txt
-or regressions detected !!
+hyperfine "taskset -c 3 ./build/k-mer data/100k.txt $count"

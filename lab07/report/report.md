@@ -207,9 +207,97 @@ sudo dnf debuginfo-install libstdc++
 
 Je vais passer un coup de profiling pour voir où est passé le plus de temps dans `add_kmer`, pour voir dans quelle direction améliorer pour commencer.
 Todo: expliquer perf annotate marche pas
+
+Je profile avec callgrind et seulement 3 et pas 10, parce que le temps de génération est trop lent pour `10`.
 ```sh
-valgrind --tool=callgrind ./build/k-mer data/100k.txt 10
+valgrind --tool=callgrind ./build/k-mer data/100k.txt 3
 ```
+
+J'ai profilé le code du début du labo sans modification et j'ai à nouveau fait l'erreur de ne pas profiler au tout début, `add_kmer` prend **88.5%** du temps, par rapport à `read_kmer` seulement **11.3%*.
+
+```c
+    299,998 ( 0.02%)      for (long i = 0; i <= file_size - k; i++) {
+    499,990 ( 0.03%)          read_kmer(input_file, i, k, kmer);
+194,420,601 (11.30%)  => src/main.c:read_kmer (99,998x)
+    699,986 ( 0.04%)          add_kmer(&table, kmer);
+1,523,940,811 (88.54%)  => src/main.c:add_kmer (99,998x)
+          .               }
+```
+
+Avec le code modifié, on voit sans surprise que tout le travail est fait dans cette fonction (99.86% du temps passé dedans)
+
+```c
+    299,999 ( 0.02%)      for (long i = 0; i <= file_size - k; i++) {
+    799,984 ( 0.05%)          add_kmer(&table, content + i, k);
+1,633,147,392 (99.86%)  => src/main.c:add_kmer (99,998x)
+          .               }
+```
+
+Analysons maintenant qu'est-ce qui prend autant de temps dans `read_kmer`, c'est clairement la recherche de l'entrée à insérer qui prend le plus de temps.
+```c
+149,261,228 ( 9.13%)      for (int i = 0; i < table->count; i++) {
+348,035,874 (21.28%)          if (memcmp(table->entries[i].kmer, kmer, k) == 0) {
+1,133,208,368 (69.29%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe (49,719,410x)
+        673 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave (1x)
+     98,998 ( 0.01%)              table->entries[i].count++;
+          .                       return;
+          .                   }
+          .               }
+```
+
+
+TODO pertinent ?
+J'avais fait l'hypothèse à la première lecture que le `realloc` allait valoir la peine d'être optimisé pour éviter des réallocations, hors cette mesure montre qu'il n'a été appelé que 11fois et prend moins du 1% du temps.
+```c
+  63   │       1,669 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/malloc/malloc.c:realloc (11x)
+```
+
+
+Benchmark actuel
+```
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
+  Time (mean ± σ):     12.122 s ±  0.349 s    [User: 12.073 s, System: 0.008 s]
+  Range (min … max):   11.819 s … 12.503 s    3 runs
+```
+
+A cause de cette algorithme en $O(N)$, on doit constamment parcourir une grande partie de la liste avant de trouver l'entrée en question ou arriver tout au bout pour se rendre compte qu'elle n'existe pas. Plus `k` est grand, plus la probabilité est élevée que le mot ne se trouve pas dans la liste et que cette liste soit grande, et que le parcours se fasse en entier. Ce qui explique le temps augmenté plus `k` est grand.
+
+On pourrait tenter d'implémenter ou d'importer une implémenation d'un arbre binaire, qui nous permettrait de faire de rechercher en $O(log(N))$, nous allons essayer de découper en plusieurs morceaux la liste en fonction du premier charactère. J'ai séparé les 10 numéros, des lettres et du reste:
+
+```c
+#define LETTERS_COUNT 26
+#define NUMBERS_COUNT 10
+typedef struct {
+    KmerTable letters[LETTERS_COUNT];// 26 KmerTable for words starting with the 26 alphabet letters (case insensitive)
+    KmerTable numbers[NUMBERS_COUNT];// 10 KmerTable words starting with for numbers
+    KmerTable rest;                  // all other words (starting with special chars)
+} KmerTables;
+```
+
+Comme le benchmark ici ne traite que des nombres, on peut s'imaginer une réduction d'environ 10 fois le temps total, puisque les listes sont remplis assez équitablement. La preuve avec ce dataset, le nombre d'entrées par premier caractère est très proche.
+```
+0 9999
+1 10137
+2 9907
+3 10024
+4 9968
+5 10026
+6 10026
+7 10025
+8 9978
+9 9901
+```
+
+
+Et c'est effectivement dans le l'ordre 10x qu'on obtient maintenant **1.143s** !!
+```
+Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
+  Time (mean ± σ):      1.143 s ±  0.011 s    [User: 1.133 s, System: 0.006 s]
+  Range (min … max):    1.128 s …  1.159 s    10 runs
+```
+
+TODO: tester avec plus grand > 3 ! maybe ce realloc prend de l'ampleur à ce moment avec beaucoup plus d'entrées.
+
 
 ## TODO
 explorer mmpap syscall vs fread, mmap mieux pour accès aléatoire.
