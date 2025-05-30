@@ -454,16 +454,36 @@ Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 On voit clairement que la section qui a diminué énormément la taille des listes et donc l'espace de recherche a eu un impact massif. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste.
 
 ### Benchmark général pour développement du multithreading
-J'ai choisi de prendre les fichiers `1m.txt` et `ascii-1m.txt` et k = `2 5 50`.
+J'ai choisi de prendre les fichiers `1m.txt` et `ascii-1m.txt` et k = `2 5 50`. J'ai aussi généré un fichier `10m.en.txt` (10MB de notes prises en anglais sur des outils ou cours).
+
+La répartition des caractères n'est pas équitable pour `10m.en.txt` comme le montre cette extrait de `k=1`. Cela va demander de gérer différement que les 2 fichiers précédents la répartition de la charge entre les threads.
+
+```
+X: 1650
+Y: 6150
+Z: 1250
+[: 16450
+\: 8850
+]: 16450
+^: 1450
+_: 13850
+`: 186950
+a: 509200
+b: 111350
+c: 235200
+d: 258550
+e: 778500
+```
+
 
 | k | File | Temps mono-threadé |
 | - | -- | - |
-|**2**|`1m.txt`|0.0161s|
-|**5**|`1m.txt`|2.1972s|
-|**50**|`1m.txt`|27.29737s|
-|**2**|`ascii-1m.txt`|0.0437s|
-|**5**|`ascii-1m.txt`|4.0756s|
-|**50**|`ascii-1m.txt`|4.0652s|
+|**2**|`1m.txt`|0.0162s|
+|**5**|`1m.txt`|2.2940s|
+|**50**|`1m.txt`|27.9965s|
+|**2**|`ascii-1m.txt`|0.0449s|
+|**5**|`ascii-1m.txt`|4.1614s|
+|**50**|`ascii-1m.txt`|4.2618s|
 
 
 ### Stratégie de parallélisation
@@ -492,16 +512,16 @@ hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/
 ```
 
 #### Parallélisation avec répartition statique
-On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais ce n'est que le début.
+On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais cela me parait bizarre que cela soit si petit.
 
 | k | File | Time before | Time after | CPU usage | Improvement factor |
 | - | -- | - | - | - | - |
-|**2**|`1m.txt`|0.0161s|0.0189s|133%|0.85x|
-|**5**|`1m.txt`|2.1972s|2.3029s|100%|0.95x|
-|**50**|`1m.txt`|27.9737s|28.6530s|99%|0.97x|
-|**2**|`ascii-1m.txt`|0.0437s|0.0211s|526%|2.06x|
-|**5**|`ascii-1m.txt`|4.0756s|1.4034s|529%|2.90x|
-|**50**|`ascii-1m.txt`|4.0652s|1.5847s|544%|2.56x|
+|**2**|`1m.txt`|0.0162s|0.0183s|146|0.88x|
+|**5**|`1m.txt`|2.2940s|2.3165s|100|0.99x|
+|**50**|`1m.txt`|27.9965s|28.3732s|99|0.98x|
+|**2**|`ascii-1m.txt`|0.0449s|0.0213s|531|2.10x|
+|**5**|`ascii-1m.txt`|4.1614s|1.4788s|524|2.81x|
+|**50**|`ascii-1m.txt`|4.2618s|1.5908s|603|2.67x|
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
