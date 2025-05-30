@@ -359,23 +359,129 @@ En théorie, si `k>=8`, on devrait avoir un peu moins de 8 fois d'accéleration,
 
 L'implémentation a eu plusieurs bug de logiques, qui ont heureusement pu être attrapée par le système de tests anti-regression, qui vérifie que la sortie triée est la même qu'au départ sur tous les fichiers (`1k 10k 100k en.big`) et plusieurs `k` (`1 2 3 5 10 20 50 98`).
 
+Etonnemment, on est loin d'avoir les 4x et 8x de gain...Pour `k=4`, on a 3.3x ce qui est le facteur le plus élevé, mais cela ne reste pas pour k=5, 6 et 7. Pour k=8 on est très très loin du facteur 8 (1.91x).
+
 | k | File | Time before | Time after | Improvement factor |
 | - | -- | - | - | - |
-|**1**|`1m.txt`|0.0029s|0.0030s|0.96x|
-|**2**|`1m.txt`|0.0163s|0.0154s|1.05x|
-|**3**|`1m.txt`|0.0812s|0.0879s|0.92x|
-|**4**|`1m.txt`|0.8569s|0.2567s|3.33x|
-|**5**|`100k.txt`|0.5642s|0.2596s|2.17x|
-|**6**|`100k.txt`|0.9542s|0.5007s|1.90x|
-|**7**|`100k.txt`|1.1105s|0.5436s|2.04x|
-|**8**|`100k.txt`|1.0841s|0.5400s|2.00x|
-|**10**|`100k.txt`|1.0346s|0.5363s|1.92x|
-|**20**|`100k.txt`|1.0344s|0.5404s|1.91x|
-|**55**|`100k.txt`|1.0335s|0.5398s|1.91x|
-|**64**|`100k.txt`|1.0266s|0.6910s|1.48x|
+|**1**|`1m.txt`|0.0030s|0.0032s|0.93x|
+|**2**|`1m.txt`|0.0160s|0.0152s|1.04x|
+|**3**|`1m.txt`|0.0827s|0.0864s|0.95x|
+|**4**|`1m.txt`|0.8465s|0.2558s|3.30x|
+|**5**|`100k.txt`|0.5429s|0.2583s|2.10x|
+|**6**|`100k.txt`|0.9499s|0.4868s|1.95x|
+|**7**|`100k.txt`|1.0180s|0.5329s|1.91x|
+|**8**|`100k.txt`|1.0192s|0.5322s|1.91x|
+|**10**|`100k.txt`|1.0244s|0.5235s|1.95x|
+|**20**|`100k.txt`|1.0113s|0.5211s|1.94x|
+|**55**|`100k.txt`|1.0239s|0.5256s|1.94x|
+|**64**|`100k.txt`|1.0177s|0.5190s|1.96x|
+
+J'ai testé aussi une suggestion de Copilot de forcer l'alignement sur 8 du champ `kmer` pour que les comparaisons sur 8 et 4 bytes puissent aussi être alignés. ->  `char kmer[MAX_KMER] __attribute__((aligned(8)));`, mais cela ne change rien voir empire légèrement le gain.
+
+Ma supposition est qu'on est limité quelque part par la bande passante mémoire et que notre usage du cache est peu efficace. En effet, de par la structure de `KmerEntry`, on a besoin de 104 bytes pour stocker une entrée, qui parfois ne fait que 9 bytes (si `k=4`, car 4 bytes pour le int + 4 pour les caractères + 1 pour le null byte).
+
+```c
+#define MAX_KMER 100
+typedef struct {
+    unsigned count;
+    char kmer[MAX_KMER];
+} KmerEntry;
+```
+Cette taille large, très souvent beaucoup plus grande que nécessaire, fait que nos listes `entries` prennent beaucoup plus de place que nécessaire, ce qui demande plus de ligne de caches à charger au total. Si on arrive à compacter l'espace, cela nous fera encore gagner du temps.
+
+Pour valider cette hypothèse, si on mesure les cache-miss, en L1 on est actuellement à 31% et L3 à 0.5%, pour `k=32` (pas d'événement supporté pour L2).
+```sh
+> sudo taskset -c 3 perf stat -e L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses ./build/k-mer data/100k.txt 32
+     <not counted>      cpu_atom/L1-dcache-loads/                                               (0.00%)
+     1,117,894,566      cpu_core/L1-dcache-loads/                                             
+   <not supported>      cpu_atom/L1-dcache-load-misses/                                       
+       337,330,960      cpu_core/L1-dcache-load-misses/  #   30.18% of all L1-dcache accesses 
+     <not counted>      cpu_atom/LLC-loads/                                                     (0.00%)
+       297,271,724      cpu_core/LLC-loads/                                                   
+     <not counted>      cpu_atom/LLC-load-misses/                                               (0.00%)
+         1,451,345      cpu_core/LLC-load-misses/        #    0.49% of all LL-cache accesses  
+```
+
+
+Il suffit de changer `#define MAX_KMER 33` au lieu de `100` et de voir qu'on passe à 12.26% en L1 et 0.02% en L3.
+```sh
+> sudo taskset -c 3 perf stat -e L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses ./build/k-mer data/100k.txt 32
+     <not counted>      cpu_atom/L1-dcache-loads/                                               (0.00%)
+     1,116,339,777      cpu_core/L1-dcache-loads/                                             
+   <not supported>      cpu_atom/L1-dcache-load-misses/                                       
+       136,914,562      cpu_core/L1-dcache-load-misses/  #   12.26% of all L1-dcache accesses 
+     <not counted>      cpu_atom/LLC-loads/                                                     (0.00%)
+        69,938,891      cpu_core/LLC-loads/                                                   
+     <not counted>      cpu_atom/LLC-load-misses/                                               (0.00%)
+            16,894      cpu_core/LLC-load-misses/        #    0.02% of all LL-cache accesses  
+```
+
+et cela se traduit aussi par un gain de temps: d'un coup les facteurs augmentent de 1.5-2 fois dès qu'on dépasse `k=4`!
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1m.txt`|0.0029s|0.0031s|0.94x|
+|**2**|`1m.txt`|0.0161s|0.0153s|1.05x|
+|**3**|`1m.txt`|0.0816s|0.0801s|1.01x|
+|**4**|`1m.txt`|0.8511s|0.2321s|3.66x|
+|**5**|`100k.txt`|0.5577s|0.1379s|4.04x|
+|**6**|`100k.txt`|0.9547s|0.2424s|3.93x|
+|**7**|`100k.txt`|1.0197s|0.2627s|3.88x|
+|**8**|`100k.txt`|1.0259s|0.2423s|4.23x|
+|**10**|`100k.txt`|1.0290s|0.2441s|4.21x|
+
+Cet essai temporaire n'est pas viable puisque on ne veut pas être limité à 32 caractères pour `k`, mais bien rester à 100. Mais en fait, au lieu de copier constamment ces `k` bytes dans des buffers séparés trop grand, pourquoi ne pas juste stocker un pointeur vers le premier caractère et ne pas gérer le null byte ? Cela est possible comme la taille est toujours pareil (toujours `k`).
+
+#### Optimisation de localité mémoire
 
 ---
-* Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
+
+100 non align
+
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1m.txt`|0.0030s|0.0034s|0.86x|
+|**2**|`1m.txt`|0.0161s|0.0153s|1.04x|
+|**3**|`1m.txt`|0.0815s|0.0911s|0.89x|
+|**4**|`1m.txt`|0.8515s|0.2585s|3.29x|
+|**5**|`100k.txt`|0.5514s|0.2418s|2.28x|
+|**6**|`100k.txt`|0.9393s|0.4379s|2.14x|
+|**7**|`100k.txt`|1.0082s|0.4847s|2.08x|
+|**8**|`100k.txt`|1.0207s|0.4982s|2.04x|
+|**10**|`100k.txt`|1.0349s|0.5096s|2.03x|
+|**20**|`100k.txt`|1.0231s|0.5061s|2.02x|
+|**55**|`100k.txt`|1.0234s|0.4881s|2.09x|
+|**64**|`100k.txt`|1.0164s|0.4940s|2.05x|
+100 withalign
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1m.txt`|0.0029s|0.0031s|0.92x|
+|**2**|`1m.txt`|0.0163s|0.0153s|1.06x|
+|**3**|`1m.txt`|0.0824s|0.0863s|0.95x|
+|**4**|`1m.txt`|0.8627s|0.2632s|3.27x|
+|**5**|`100k.txt`|0.5660s|0.2633s|2.14x|
+|**6**|`100k.txt`|0.9764s|0.5471s|1.78x|
+|**7**|`100k.txt`|1.0570s|0.5588s|1.89x|
+|**8**|`100k.txt`|1.0348s|0.5354s|1.93x|
+|**10**|`100k.txt`|1.0242s|0.5303s|1.93x|
+|**20**|`100k.txt`|1.0122s|0.5193s|1.94x|
+|**55**|`100k.txt`|1.0119s|0.5234s|1.93x|
+|**64**|`100k.txt`|1.0172s|0.5249s|1.93x|
+
+66 with alignment
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1m.txt`|0.0031s|0.0034s|0.90x|
+|**2**|`1m.txt`|0.0167s|0.0160s|1.03x|
+|**3**|`1m.txt`|0.0820s|0.0913s|0.89x|
+|**4**|`1m.txt`|0.8523s|0.2561s|3.32x|
+|**5**|`100k.txt`|0.5457s|0.2133s|2.55x|
+|**6**|`100k.txt`|0.9599s|0.3775s|2.54x|
+|**7**|`100k.txt`|1.0249s|0.4113s|2.49x|
+|**8**|`100k.txt`|1.0294s|0.3920s|2.62x|
+|**10**|`100k.txt`|1.0250s|0.3889s|2.63x|
+|**20**|`100k.txt`|1.0384s|0.3842s|2.70x|
+|**55**|`100k.txt`|1.0283s|0.4009s|2.56x|
+|**64**|`100k.txt`|1.2349s|0.3989s|3.09x|* Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
 * Une analyse des performances de votre version mono-threadée.
 * Une description de la stratégie de parallélisation mise en œuvre : répartition du travail entre threads, traitement des cas limites, zones de chevauchement, etc.
 * Une comparaison détaillée entre les performances des versions mono et multithreadée (temps d’exécution, scalabilité, goulots d’étranglement...).

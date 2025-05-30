@@ -9,14 +9,14 @@
 #define MAX_KMER 100
 
 typedef struct {
-    int count;
-    char kmer[MAX_KMER] __attribute__((aligned(8)));
+    unsigned count;
+    char kmer[MAX_KMER];
 } KmerEntry;
 
 typedef struct {
     KmerEntry *entries;
-    int count;
-    int capacity;
+    unsigned count;
+    unsigned capacity;
 } KmerTable;
 
 #define LETTERS_COUNT 26
@@ -63,13 +63,14 @@ void add_kmer(KmerTable *table, const char *kmer, const int k) {
                 if (entries[i].kmer[j] != kmer[j])
                     goto next_round;
 
+            // All chars have been compared at this point, if we didn't followed the goto, all chars are equal
             entries[i].count++;
             return;
         next_round:
         }
         // TODO: fix warning about C23 extension ???
     } else {
-        // normal execution for k < 4, compare each character one by one
+        // Normal execution for k < 4, compare each character one by one
         // This is separated from above to avoid the unnecessary branching overhead
         for (int i = 0; i < tableCount; i++) {
             for (size_t j = 0; j < k; j++)
