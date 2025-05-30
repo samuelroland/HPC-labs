@@ -416,7 +416,7 @@ Si on pousse encore plus loin les tests avec le fichier `1m.txt`, l'overhead des
 |**64**|`1m.txt`|238.9192s|28.8191s|8.29x|
 
 #### Problème de grosse latence sur ASCII random
-Tous mes benchmark jusqu'à maintenant ont été réalisés sur des fichiers avec des chiffres, j'ai donc ignoré la possibilité d'avoir des fichiers avec des caractères ASCII autre qu'alphabétique et numéros. J'ai généré un fichier `ascii-1m.txt` (1million de caractères ASCII visibles, entre code le 32 et 126). Sans surprise, le fichier ascii est super long à traiter alors qu'il a la même taille.
+Tous mes benchmark jusqu'à maintenant ont été réalisés sur des fichiers avec des chiffres, j'ai donc ignoré la possibilité d'avoir des fichiers avec des caractères ASCII autre qu'alphabétique et numéros. J'ai généré un fichier `ascii-1m.txt` (1million de caractères ASCII visibles, entre code le 32 et 126). Sans surprise au vu de la stratégie actuel, le fichier ascii est super long à traiter alors qu'il a la même taille.
 
 ```sh
 Benchmark 1: taskset -c 3 ./build/k-mer data/1m.txt 2
@@ -472,11 +472,17 @@ En effet, plusieurs race conditions peuvent arriver:
 1. 1 kmer avec deux entrées successives, parce que la première entrée a été inséré juste après que l'autre chercher ait fini de parcourir la liste
 1. durant une réallocation la liste n'est pas utilisable, sinon on court le risque d'utiliser la zone précédente ou de réallouer 2 fois et fuiter une des allocations ou d'avoir les paramètres de capacités et taille pas encore tout à fait mis à jour sur le nouveau bloc alloué...
 
-Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur ou les réallocs doivent se faire sans que personne ne lise la liste associée. On retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs pour un thread lecteur ou tout seul pour un thread rédacteur.
-
-L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible permet de bloquer seulement une liste à la fois quand on insère ou ré
+Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur, insertions ou les réallocs doivent se faire sans que personne ne lise la liste associée. On retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs pour un thread lecteur ou tout seul pour un thread rédacteur.
 
 TODO: fix les typos avec language tool !!!
+L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible permet de bloquer seulement une liste à la fois en écriture et bloquer temporairement uniquement une partie des threads lecteurs.
+
+Un élément très intéressant que je n'avais pas remarqué et que `k=1` est toujours très rapide, faire un premier tour avec `k=1` peut tout à fait valoir la peine.
+```sh
+Benchmark 1: ./build/k-mer ./data/ascii-1m.txt 1
+  Time (mean ± σ):       3.7 ms ±   0.4 ms    [User: 3.1 ms, System: 0.4 ms]
+```
+
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.

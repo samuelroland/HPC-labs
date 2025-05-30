@@ -118,7 +118,7 @@ for file in $files
         if test $file = ascii-1m.txt
             set runs 2
         end
-        hyperfine --max-runs $runs -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json new.$file.$count.out.json &>/dev/null
+        hyperfine --max-runs $runs -N "taskset -c 2-11 ./build/k-mer data/$file $count" --export-json new.$file.$count.out.json &>/dev/null
         append_results $count $file
     end
 end

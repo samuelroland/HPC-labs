@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,6 +90,25 @@ void add_kmer(KmerTable *table, const char *kmer, const int k) {
     table->count++;
 }
 
+void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads) {
+    for (int i = 0; i < ASCII_COUNT; i++) {
+        init_kmer_table(tables + i);
+    }
+
+    // Start extracting, searching k-mer and saving them
+    for (long i = 0; i <= file_size - k; i++) {
+        // Pick among one of the 37 available subtable
+        char firstChar = content[i];
+        if (firstChar < 0) {// this is a partially extracted byte from a longer UTF8 char, we are skipping them for this program
+            continue;
+        }
+        KmerTable *subtable = tables + firstChar;
+
+        // Research in this subtable or insert it at the end
+        add_kmer(subtable, content + i, k);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <input_file> <k>\n", argv[0]);
@@ -109,26 +129,15 @@ int main(int argc, char **argv) {
     }
 
     fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
+    size_t file_size = ftell(file);
 
     // Map the file to a memory region to be able to access it and move a pointer on it
     char *content = (char *) mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fileno(file), 0);
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    for (int i = 0; i < ASCII_COUNT; i++) {
-        init_kmer_table(tables + i);
-    }
-
-    // Start extracting, searching k-mer and saving them
-    for (long i = 0; i <= file_size - k; i++) {
-        // Pick among one of the 37 available subtable
-        char firstChar = content[i];
-        KmerTable *subtable = tables + firstChar;
-
-        // Research in this subtable or insert it at the end
-        add_kmer(subtable, content + i, k);
-    }
+    int nbThreads = 10;
+    runKmersAlgo(content, file_size, k, tables, nbThreads);
 
     // Show the results and free entries list as we go
     printf("Results:\n");
