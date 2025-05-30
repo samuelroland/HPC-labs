@@ -6,11 +6,9 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 
-#define MAX_KMER 100
-
 typedef struct {
+    const char *kmer;// a pointer on the first char, of a string of length k, without a null byte as we are pointing on the original buffer
     unsigned count;
-    char kmer[MAX_KMER];
 } KmerEntry;
 
 typedef struct {
@@ -92,8 +90,7 @@ void add_kmer(KmerTable *table, const char *kmer, const int k) {
         }
     }
 
-    memcpy(table->entries[table->count].kmer, kmer, k);
-    table->entries[table->count].kmer[k] = '\0';
+    table->entries[table->count].kmer = kmer;
     table->entries[table->count].count = 1;
     table->count++;
 }
@@ -157,7 +154,7 @@ int main(int argc, char **argv) {
         KmerTable *table = tables.letters + i;
         int count = table->count;
         for (int i = 0; i < count; i++) {
-            printf("%s: %d\n", table->entries[i].kmer, table->entries[i].count);
+            printf("%.*s: %d\n", k, table->entries[i].kmer, table->entries[i].count);
         }
         free(table->entries);
     }
@@ -165,7 +162,7 @@ int main(int argc, char **argv) {
         KmerTable *table = tables.numbers + i;
         int count = table->count;
         for (int i = 0; i < count; i++) {
-            printf("%s: %d\n", table->entries[i].kmer, table->entries[i].count);
+            printf("%.*s: %d\n", k, table->entries[i].kmer, table->entries[i].count);
         }
         free(table->entries);
     }
@@ -173,7 +170,7 @@ int main(int argc, char **argv) {
     int count = tables.rest.count;
     for (int i = 0; i < count; i++) {
         KmerEntry *entry = &table->entries[i];
-        printf("%s: %d\n", entry->kmer, entry->count);
+        printf("%.*s: %d\n", k, entry->kmer, entry->count);
     }
     free(tables.rest.entries);
 
