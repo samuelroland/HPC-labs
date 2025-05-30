@@ -415,6 +415,23 @@ Si on pousse encore plus loin les tests avec le fichier `1m.txt`, l'overhead des
 |**55**|`1m.txt`|241.1902s|29.2314s|8.25x|
 |**64**|`1m.txt`|238.9192s|28.8191s|8.29x|
 
+#### Problème de grosse latence sur ASCII random
+Tous mes benchmark jusqu'à maintenant ont été réalisés sur des fichiers avec des chiffres, j'ai donc ignoré la possibilité d'avoir des fichiers avec des caractères ASCII autre qu'alphabétique et numéros. J'ai généré un fichier `ascii-1m.txt` (1million de caractères ASCII visibles, entre code le 32 et 126). Sans surprise, le fichier ascii est super long à traiter alors qu'il a la même taille.
+
+```sh
+Benchmark 1: taskset -c 3 ./build/k-mer data/1m.txt 2
+  Time (mean ± σ):      16.2 ms ±   0.1 ms    [User: 15.2 ms, System: 0.8 ms]
+Benchmark 1: taskset -c 3 ./build/k-mer data/ascii-1m.txt 2
+  Time (mean ± σ):     566.5 ms ±   1.6 ms    [User: 564.6 ms, System: 0.8 ms]
+```
+
+J'ai donc simplifié ma structure de donnée qui était inutilement compliqué pour gagner un poil de mémoire, en la remplaçant par un tableau `KmerTable tables[ASCII_COUNT];`. Cela a également eu le bénéfice de simplifier une partie du code. On revient dans des grandeurs beaucoup plus proches. La différence restante est normale, puisqu'il y a 95 caractères différents au lieu de 10, ce qui fait des listes plus longues.
+```sh
+Benchmark 1: ./build/k-mer data/1m.txt 2
+  Time (mean ± σ):      16.7 ms ±   0.6 ms    [User: 15.7 ms, System: 0.9 ms]
+Benchmark 1: ./build/k-mer data/ascii-1m.txt 2
+  Time (mean ± σ):      46.9 ms ±   1.5 ms    [User: 45.8 ms, System: 0.8 ms]
+```
 
 ### Conclusion de la préparation
 J'ai travaillé sur de nombreux aspects afin d'améliorer le code existant mono-threadé, la majorité du temps était passée à chercher une entrée existante dans la liste et en comparant les caractères, cette partie a été optimisée un bon morceau. Je suis allé plus loin que demandé dans cette partie parce que c'était vraiment fun de pousser le challenge si loin.
@@ -435,6 +452,16 @@ Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 On voit clairement que la section qui a diminué énormément la taille des listes et donc l'espace de recherche a eu un impact massif. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste.
 
 ### Benchmark général pour développement du multithreading
+J'ai choisi de prendre ?
+
+| k | File | Temps mono-threadé |
+| - | -- | - |
+|**2**|`100k.txt`|0.0026s|
+|**5**|`100k.txt`|0.1380s|
+|**50**|`100k.txt`|0.2012s|
+|**2**|`ascii-1m.txt`|0.0449s|
+|**5**|`ascii-1m.txt`|3.9602s|
+|**50**|`ascii-1m.txt`|3.9782|
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.

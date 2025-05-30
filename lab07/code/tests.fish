@@ -3,7 +3,7 @@ or return
 
 # clear
 
-set files 1k 10k 100k en.big
+set files 1k 10k 100k ascii-1m
 set counts 1 2 3 5 10 20 50 98
 set QUICK_TEST_COUNT 10
 
@@ -47,6 +47,10 @@ if ! test "$argv[1]" = justbench
     if test "$argv[1]" = full
         for count in $counts
             for file in $files
+                if ! test -f expected/$file-$count.sorted.txt
+                    color yellow "skip unavailable file $file"
+                    continue
+                end
                 if ! run $file $count
                     echo regressions detected !!
                     return 2
@@ -55,6 +59,10 @@ if ! test "$argv[1]" = justbench
         end
     else
         for file in $files
+            if ! test -f expected/$file-$count.sorted.txt
+                color yellow "skip unavailable file $file"
+                continue
+            end
             if ! run $file $QUICK_TEST_COUNT
                 echo regressions detected !!
                 return
@@ -85,24 +93,42 @@ function append_results
     printf "|%.4fs" $aftertime >>$RESULT_FILE
     set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
     printf "|%.2fx|\n" $factor >>$RESULT_FILE
-    color green "Factor of $factor"
+    color green (printf "$factor""x: %.4fs -> %.4fs" $beforetime $aftertime)
 end
 
-set beforebin k-mer-before-memcmp-opti
+set beforebin k-mer-single-thread
+set beforebin k-mer
 set file 1m.txt
-for count in 1 2 3 4
-    hyperfine -r 10 -N --warmup 3 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
-    hyperfine -r 10 -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
-    append_results $count $file
+set files 100k ascii-1m
+for file in $files
+    set file $file.txt
+    color cyan "File $file"
+    for count in 2 5 50
+        set runs 10
+        if test $count -gt 10
+            set runs 3
+        end
+        if test $file = ascii-1m.txt
+            set runs 2
+        end
+        echo -n "k=$count: "
+        hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json >/dev/null
+        # run multithreaded version more times
+        if test $file = ascii-1m.txt
+            set runs 4
+        end
+        hyperfine --max-runs $runs -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json >/dev/null
+        append_results $count $file
+    end
 end
 
-set file 100k.txt
-for count in 5 6 7 8 10 20 55 64
-    hyperfine -r 3 --warmup 1 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
-    hyperfine -r 3 "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
-    append_results $count $file
-end
-
+# set file 100k.txt
+# for count in 5 6 7 8 10 20 55 64
+#     hyperfine -r 3 --warmup 1 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
+#     hyperfine -r 3 "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
+#     append_results $count $file
+# end
+#
 glow $RESULT_FILE
 echo
 cat $RESULT_FILE
