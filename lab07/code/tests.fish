@@ -87,8 +87,8 @@ function append_results
     set file $argv[2]
 
     echo -n "|**$count**|`$file`" >>$RESULT_FILE
-    set beforetime (jq .results[0].mean < out.json)
-    set aftertime (jq .results[0].mean < out2.json)
+    set beforetime (jq .results[0].mean < base.$file.$count.out.json)
+    set aftertime (jq .results[0].mean < new.$file.$count.out.json)
     printf "|%.4fs" $beforetime >>$RESULT_FILE
     printf "|%.4fs" $aftertime >>$RESULT_FILE
     set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
@@ -99,25 +99,26 @@ end
 set beforebin k-mer-single-thread
 set beforebin k-mer
 set file 1m.txt
-set files 100k ascii-1m
+set files 1m ascii-1m
 for file in $files
     set file $file.txt
     color cyan "File $file"
     for count in 2 5 50
         set runs 10
         if test $count -gt 10
+            set runs 4
+        end
+        if test $file = ascii-1m.txt
             set runs 3
         end
+        echo -n "k=$count: "
+        # enable this line only the first time
+        # hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json >/dev/null
+        # run multithreaded version more times
         if test $file = ascii-1m.txt
             set runs 2
         end
-        echo -n "k=$count: "
-        hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json >/dev/null
-        # run multithreaded version more times
-        if test $file = ascii-1m.txt
-            set runs 4
-        end
-        hyperfine --max-runs $runs -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json >/dev/null
+        hyperfine --max-runs $runs -N "taskset -c 3 ./build/k-mer data/$file $count" --export-json new.$file.$count.out.json &>/dev/null
         append_results $count $file
     end
 end

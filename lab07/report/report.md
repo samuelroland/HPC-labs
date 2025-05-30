@@ -452,16 +452,31 @@ Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 On voit clairement que la section qui a diminué énormément la taille des listes et donc l'espace de recherche a eu un impact massif. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste.
 
 ### Benchmark général pour développement du multithreading
-J'ai choisi de prendre ?
+J'ai choisi de prendre les fichiers `1m.txt` et `ascii-1m.txt` et k = `2 5 50`.
 
 | k | File | Temps mono-threadé |
 | - | -- | - |
-|**2**|`100k.txt`|0.0026s|
-|**5**|`100k.txt`|0.1380s|
-|**50**|`100k.txt`|0.2012s|
-|**2**|`ascii-1m.txt`|0.0449s|
-|**5**|`ascii-1m.txt`|3.9602s|
-|**50**|`ascii-1m.txt`|3.9782|
+|**2**|`1m.txt`|0.0161s|
+|**5**|`1m.txt`|2.1972s|
+|**50**|`1m.txt`|27.29737s|
+|**2**|`ascii-1m.txt`|0.0437s|
+|**5**|`ascii-1m.txt`|4.0756s|
+|**50**|`ascii-1m.txt`|4.0652s|
+
+
+### Stratégie de parallélisation
+L'analyse du fichier est parallélisable, puisque chaque kmer peut être recherché et inséré en parallèle, à condition qu'on fasse attention aux incréments du compteurs une fois l'entrée trouvée et durant les réallocations de listes.
+En effet, plusieurs race conditions peuvent arriver:
+1. si 2 kmer identiques ont trouvés leur `KmerEntry` en même temps, le compteur pourrait n'avoir qu'un seul incrément au lieu de deux
+1. si 2 kmer dans la même sous liste sont trouvées en même temps et insérés en bout de liste sur le dernier élément disponible, selon l'ordonnancement effectué, on pourrait avoir 2 insertions au même endroit (une serait perdue)
+1. 1 kmer avec deux entrées successives, parce que la première entrée a été inséré juste après que l'autre chercher ait fini de parcourir la liste
+1. durant une réallocation la liste n'est pas utilisable, sinon on court le risque d'utiliser la zone précédente ou de réallouer 2 fois et fuiter une des allocations ou d'avoir les paramètres de capacités et taille pas encore tout à fait mis à jour sur le nouveau bloc alloué...
+
+Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur ou les réallocs doivent se faire sans que personne ne lise la liste associée. On retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs pour un thread lecteur ou tout seul pour un thread rédacteur.
+
+L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible permet de bloquer seulement une liste à la fois quand on insère ou ré
+
+TODO: fix les typos avec language tool !!!
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
