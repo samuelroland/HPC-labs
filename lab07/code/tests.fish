@@ -92,29 +92,28 @@ function append_results
     printf "|%.4fs" $beforetime >>$RESULT_FILE
     printf "|%.4fs" $aftertime >>$RESULT_FILE
     set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
-    printf "|%d%" (cat percent | grep -oP "\d+%") >>$RESULT_FILE
+    printf "|%d%%" (cat percent | grep -oP "\d+") >>$RESULT_FILE
     printf "|%.2fx|\n" $factor >>$RESULT_FILE
     color green (printf "$factor""x: %.4fs -> %.4fs" $beforetime $aftertime)
 end
 
 set beforebin k-mer-single-thread
-set file 1m.txt
-set files 1m ascii-1m
-set files 10m.en
+set files 1m ascii-1m 10m.en
+set counts 2 5 # 50
 for file in $files
     set file $file.txt
     color cyan "File $file"
-    for count in 2 5 50
+    for count in $counts
         set runs 10
         if test $count -gt 4
-            set runs 4
+            set runs 3
         end
         if test $file = ascii-1m.txt
             set runs 3
         end
         echo -n "k=$count: "
         # enable this line only the first time
-        hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --show-output --export-json base.$file.$count.out.json
+        # hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
         # run multithreaded version more times
         hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
         color blue (cat percent)

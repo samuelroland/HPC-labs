@@ -154,7 +154,6 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         } else {
             tinfo[i].maxCharIndex = (i + 1) * charsPerThread - 1;
         }
-        assert(tinfo[i].minCharIndex <= tinfo[i].maxCharIndex);
 
         int result = pthread_create(&tinfo[i].thread_id, NULL, &manageKmersOnFileThreaded, tinfo + i);
         if (result != 0) {

@@ -484,7 +484,9 @@ e: 778500
 |**2**|`ascii-1m.txt`|0.0449s|
 |**5**|`ascii-1m.txt`|4.1614s|
 |**50**|`ascii-1m.txt`|4.2618s|
-
+|**2**|`10m.en.txt`|0.1955s|
+|**5**|`10m.en.txt`|4.6121s|
+|**50**|`10m.en.txt`|23.3860s|
 
 ### Stratégie de parallélisation
 L'analyse du fichier est parallélisable, puisque chaque kmer peut être recherché et inséré en parallèle, à condition qu'on fasse attention aux incréments du compteurs une fois l'entrée trouvée et durant les réallocations de listes.
@@ -494,16 +496,15 @@ En effet, plusieurs race conditions peuvent arriver:
 1. 1 kmer avec deux entrées successives, parce que la première entrée a été inséré juste après que l'autre chercher ait fini de parcourir la liste
 1. durant une réallocation la liste n'est pas utilisable, sinon on court le risque d'utiliser la zone précédente ou de réallouer 2 fois et fuiter une des allocations ou d'avoir les paramètres de capacités et taille pas encore tout à fait mis à jour sur le nouveau bloc alloué...
 
-Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur, insertions ou les réallocs doivent se faire sans que personne ne lise la liste associée. On retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs pour un thread lecteur ou tout seul pour un thread rédacteur.
+Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur, insertions ou les réallocs doivent se faire sans que personne ne lise la liste associée.
+
+Pour respecter ces contraintes, je vois deux approches possibles, en considérant 10 threads disponibles:
+1. Découper le fichier en morceaux équivalents pour 9 threads. Avoir un thread qui gère tout ce qui écriture, et 9 autres travaillent à gérer les kmers sur leur section du fichier. Pour protéger la sous liste spécifique dans laquelle il y aura une modification, on retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs thread lecteurs ou tout seul pour un thread rédacteur. On aurait besoin de ce système pour chaque sous liste. L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible, permet de bloquer seulement une liste à la fois en écriture et bloquer temporairement uniquement une partie des threads lecteurs.
+1. Découper l'espace des caractères ASCII pour grouper certaines sous listes ensembles. Chaque thread cherche ainsi les caractères dans une plage donnée (par ex. de `A` à `R`) en parcourant tout le fichier et ignorant tous les caractères hors de la plage. Une fois un kmer trouvé, il le gère lui-même. Chaque thread lit tout le fichier mais il n'y aucune opération d'écriture sur le fichier donc cela ne pose pas soucis. Comme chaque thread travaille sur un sous ensemble de liste bien différentes des autres, il n'y a aucun accès écriture et lecture à une zone partagé. Pas de section critique à gérer donc.
+
+De par son indépendance et son absence complet de section critiques, je vais prendre l'option deux, cela jouera probablement en faveur de simplifier l'implémentation et j'imagine améliorer la performance.
 
 TODO: fix les typos avec language tool !!!
-L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible permet de bloquer seulement une liste à la fois en écriture et bloquer temporairement uniquement une partie des threads lecteurs.
-
-Un élément très intéressant que je n'avais pas remarqué et que `k=1` est toujours très rapide, faire un premier tour avec `k=1` peut tout à fait valoir la peine.
-```sh
-Benchmark 1: ./build/k-mer ./data/ascii-1m.txt 1
-  Time (mean ± σ):       3.7 ms ±   0.4 ms    [User: 3.1 ms, System: 0.4 ms]
-```
 
 J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time -v` pour récupérer un pourcentage d'usage des CPUs globalement, pour avoir une idée d'à quel point on utilise bien nos 10 coeurs. Je pin les threads sur les coeurs 2 à 11. En théorie, il y a 11 threads qui vont tourner (thread principal + 10 démarrés) mais le thread principal ne fera que d'attendre quand les autres travaillent donc je n'attribue pas plus de coeurs physiques.
 
@@ -511,17 +512,36 @@ J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time
 hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
 ```
 
+Le pourcentage espéré est de 1000% (100% sur 10 coeurs).
+
 #### Parallélisation avec répartition statique
-On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais cela me parait bizarre que cela soit si petit.
+On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais cela me parait bizarre que cela soit si petit au vu des 10 threads. Finalement le facteur de 1.6-1.7 pour `10m.en.txt` s'explique par le fait que les caractères sont inéquitablement répartis, une partie des threads travaillent probablement beaucoup plus que les autres.
 
 | k | File | Time before | Time after | CPU usage | Improvement factor |
 | - | -- | - | - | - | - |
-|**2**|`1m.txt`|0.0162s|0.0183s|146|0.88x|
-|**5**|`1m.txt`|2.2940s|2.3165s|100|0.99x|
-|**50**|`1m.txt`|27.9965s|28.3732s|99|0.98x|
-|**2**|`ascii-1m.txt`|0.0449s|0.0213s|531|2.10x|
-|**5**|`ascii-1m.txt`|4.1614s|1.4788s|524|2.81x|
-|**50**|`ascii-1m.txt`|4.2618s|1.5908s|603|2.67x|
+|**2**|`1m.txt`|0.0162s|0.0183s|146%|0.88x|
+|**5**|`1m.txt`|2.2940s|2.3165s|100%|0.99x|
+|**50**|`1m.txt`|27.9965s|28.3732s|99%|0.98x|
+|**2**|`ascii-1m.txt`|0.0449s|0.0213s|531%|2.10x|
+|**5**|`ascii-1m.txt`|4.1614s|1.4788s|524%|2.81x|
+|**50**|`ascii-1m.txt`|4.2618s|1.5908s|603%|2.67x|
+|**2**|`10m.en.txt`|0.1955s|0.1149s|450%|1.70x|
+|**5**|`10m.en.txt`|4.6121s|2.5912s|292%|1.77x|
+|**50**|`10m.en.txt`|23.3860s|14.5286s|258%|1.60x|
+
+
+#### Parallélisation avec répartition dynamique
+Pour s'adapter à ces différents types de données il est nécessaire de découper l'espace des caractères ASCII afin de minimiser la différence du nombre de kmers à gérer par liste entre chaque thread.
+
+Un élément très intéressant que je n'avais pas remarqué et que `k=1` est toujours très rapide, faire un premier tour avec `k=1` peut tout à fait valoir la peine.
+```sh
+Benchmark 1: ./build/k-mer ./data/ascii-1m.txt 1
+  Time (mean ± σ):       3.7 ms ±   0.4 ms    [User: 3.1 ms, System: 0.4 ms]
+```
+
+Cela nous donne des compteurs exactes du nombre de fois que se trouve chaque caractère, permettant ainsi de faire des groupes de caractères contigus. Pour choisir combien de caractère mettre dans ces groupes, on se base sur la longueur des listes, en les sommant on s'arrête juste avant ou après dépasser le nombre `taille du fichier / nombre de threads`. Il faut évidemment que cette préparation soit négligeable pour ne pas créer d'overhead significatif sur le programme.
+
+Pour le fichier `1m.txt`, on va pouvoir ainsi compléter ignorer les caractères non numérique comme on sait qu'il n'y a aucun et dédier un thread par chiffre!
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
