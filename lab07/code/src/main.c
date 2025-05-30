@@ -1,4 +1,5 @@
-#include <ctype.h>
+#include <assert.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@ typedef struct {
     unsigned capacity;
 } KmerTable;
 
-#define ASCII_COUNT 128// 32 + 1
+#define ASCII_COUNT 128
 
 void init_kmer_table(KmerTable *table) {
     table->count = 0;
@@ -89,23 +90,81 @@ void add_kmer(KmerTable *table, const char *kmer, const int k) {
     table->entries[table->count].count = 1;
     table->count++;
 }
+typedef struct {
+    // Specific args
+    pthread_t thread_id;
+    unsigned minCharIndex;
+    unsigned maxCharIndex;
+    // Common args (equal for all threads)
+    char *content;
+    size_t fileSize;
+    int k;
+    KmerTable *tables;
+} ThreadInfo;
 
-void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads) {
-    for (int i = 0; i < ASCII_COUNT; i++) {
-        init_kmer_table(tables + i);
-    }
+// Researching and inserting for a specific set of chars between given min and max index
+// this can be run in a separated thread or not, depending on the needs
+void manageKmersOnFile(ThreadInfo *info) {
+    char *content = info->content;
+    size_t file_size = info->fileSize;
+    int k = info->k;
+    KmerTable *tables = info->tables;
+    int min = info->minCharIndex;
+    int max = info->maxCharIndex;
 
     // Start extracting, searching k-mer and saving them
     for (long i = 0; i <= file_size - k; i++) {
         // Pick among one of the 37 available subtable
         char firstChar = content[i];
-        if (firstChar < 0) {// this is a partially extracted byte from a longer UTF8 char, we are skipping them for this program
+        if (firstChar < min || firstChar > max) {
             continue;
         }
         KmerTable *subtable = tables + firstChar;
 
         // Research in this subtable or insert it at the end
         add_kmer(subtable, content + i, k);
+    }
+}
+
+void *manageKmersOnFileThreaded(void *args) {
+    ThreadInfo *info = (ThreadInfo *) args;
+    manageKmersOnFile(info);
+    return NULL;
+}
+
+void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads) {
+    for (int i = 0; i < ASCII_COUNT; i++) {
+        init_kmer_table(tables + i);
+    }
+
+    // Static cut of ASCII space
+    int charsPerThread = ASCII_COUNT / nbThreads;
+
+    ThreadInfo tinfo[nbThreads];
+    for (int i = 0; i < nbThreads; i++) {
+        // Copy common read only fields
+        tinfo[i].content = content;
+        tinfo[i].fileSize = file_size;
+        tinfo[i].k = k;
+        tinfo[i].tables = tables;
+
+        tinfo[i].minCharIndex = i * charsPerThread;
+        if (i == nbThreads - 1) {                   // last has the remaining, in case the rounding has made the last thread just a bit more
+            tinfo[i].maxCharIndex = ASCII_COUNT - 1;// the last one is 127
+        } else {
+            tinfo[i].maxCharIndex = (i + 1) * charsPerThread - 1;
+        }
+        assert(tinfo[i].minCharIndex <= tinfo[i].maxCharIndex);
+
+        int result = pthread_create(&tinfo[i].thread_id, NULL, &manageKmersOnFileThreaded, tinfo + i);
+        if (result != 0) {
+            printf("Error: creating thread %d \n", i);
+            exit(2);
+        }
+    }
+
+    for (int i = 0; i < nbThreads; i++) {
+        pthread_join(tinfo[i].thread_id, NULL);
     }
 }
 

@@ -6,6 +6,8 @@
 
 ## Première partie — Analyse des k-mers
 
+todo fichiers utilisés !
+
 ### Baseline
 Le code tel quel nous un résultat assez différent selon le nombre de `k` mais voici sur 100'000 décimales de PI le résultat. Plus `k` est élevé plus le temps est long. Nous sommes à **16.210s**.
 ```sh
@@ -483,6 +485,23 @@ Benchmark 1: ./build/k-mer ./data/ascii-1m.txt 1
   Time (mean ± σ):       3.7 ms ±   0.4 ms    [User: 3.1 ms, System: 0.4 ms]
 ```
 
+J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time -v` pour récupérer un pourcentage d'usage des CPUs globalement, pour avoir une idée d'à quel point on utilise bien nos 10 coeurs. Je pin les threads sur les coeurs 2 à 11. En théorie, il y a 11 threads qui vont tourner (thread principal + 10 démarrés) mais le thread principal ne fera que d'attendre quand les autres travaillent donc je n'attribue pas plus de coeurs physiques.
+
+```sh
+hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
+```
+
+#### Parallélisation avec répartition statique
+On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais ce n'est que le début.
+
+| k | File | Time before | Time after | CPU usage | Improvement factor |
+| - | -- | - | - | - | - |
+|**2**|`1m.txt`|0.0161s|0.0189s|133%|0.85x|
+|**5**|`1m.txt`|2.1972s|2.3029s|100%|0.95x|
+|**50**|`1m.txt`|27.9737s|28.6530s|99%|0.97x|
+|**2**|`ascii-1m.txt`|0.0437s|0.0211s|526%|2.06x|
+|**5**|`ascii-1m.txt`|4.0756s|1.4034s|529%|2.90x|
+|**50**|`ascii-1m.txt`|4.0652s|1.5847s|544%|2.56x|
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.

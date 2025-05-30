@@ -79,8 +79,8 @@ set RESULT_FILE results.md
 # hyperfine -r 4 "taskset -c 3 ./build/k-mer-before-memcmp-opti data/100k.txt $QUICK_TEST_COUNT"
 
 echo """
-| k | File | Time before | Time after | Improvement factor |
-| - | -- | - | - | - |""" >$RESULT_FILE
+| k | File | Time before | Time after | CPU usage | Improvement factor |
+| - | -- | - | - | - | - |""" >$RESULT_FILE
 
 function append_results
     set count $argv[1]
@@ -92,20 +92,21 @@ function append_results
     printf "|%.4fs" $beforetime >>$RESULT_FILE
     printf "|%.4fs" $aftertime >>$RESULT_FILE
     set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
+    printf "|%d%" (cat percent | grep -oP "\d+%") >>$RESULT_FILE
     printf "|%.2fx|\n" $factor >>$RESULT_FILE
     color green (printf "$factor""x: %.4fs -> %.4fs" $beforetime $aftertime)
 end
 
 set beforebin k-mer-single-thread
-set beforebin k-mer
 set file 1m.txt
 set files 1m ascii-1m
+# set files ascii-1m
 for file in $files
     set file $file.txt
     color cyan "File $file"
     for count in 2 5 50
         set runs 10
-        if test $count -gt 10
+        if test $count -gt 4
             set runs 4
         end
         if test $file = ascii-1m.txt
@@ -118,7 +119,8 @@ for file in $files
         if test $file = ascii-1m.txt
             set runs 2
         end
-        hyperfine --max-runs $runs -N "taskset -c 2-11 ./build/k-mer data/$file $count" --export-json new.$file.$count.out.json &>/dev/null
+        hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
+        color blue (cat percent)
         append_results $count $file
     end
 end
