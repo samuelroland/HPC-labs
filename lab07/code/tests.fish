@@ -100,7 +100,7 @@ end
 set beforebin k-mer-single-thread
 set file 1m.txt
 set files 1m ascii-1m
-# set files ascii-1m
+set files ascii-1m
 for file in $files
     set file $file.txt
     color cyan "File $file"
@@ -114,7 +114,7 @@ for file in $files
         end
         echo -n "k=$count: "
         # enable this line only the first time
-        # hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json >/dev/null
+        hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
         # run multithreaded version more times
         if test $file = ascii-1m.txt
             set runs 2
