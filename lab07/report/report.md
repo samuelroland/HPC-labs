@@ -1,8 +1,13 @@
 # Rapport HPC Lab 7 - Parallélisme des tâches - Samuel Roland
+
+[[toc]]
+
+<!-- TODO support toc ? -->
+
 ## Première partie — Analyse des k-mers
 
 ### Baseline
-Le code tel quel nous un résultat assez différent selon le nombre de `k` mais voici sur 100'000 décimales de PI le résutlat. Plus `k` est élevé plus le temps est long. Nous sommes à **16.210s**.
+Le code tel quel nous un résultat assez différent selon le nombre de `k` mais voici sur 100'000 décimales de PI le résultat. Plus `k` est élevé plus le temps est long. Nous sommes à **16.210s**.
 ```sh
 > hyperfine './build/k-mer data/100k.txt 10'
   Time (mean ± σ):     16.210 s ±  1.538 s    [User: 15.869 s, System: 0.246 s]
@@ -31,14 +36,12 @@ Puis cette boucle va appeler `read_kmer` presque pour chaque caractères et `rea
 Si on passe le `FILE*` dans la fonction `read_kmer` et on l'ouvre et ferme une seule fois, on passe à **14.314s**, déjà un peu mieux.
 
 ```sh
-> hyperfine -r 3 './build/k-mer data/100k.txt 10'
   Time (mean ± σ):     14.314 s ±  0.991 s    [User: 14.234 s, System: 0.020 s]
 ```
 
 #### Flags de compilation
 Un autre "low hanging fruit" est d'activer `-O3` dans les flags GCC. On arrive à **11.859s**.
 ```sh
-> hyperfine -r 3 './build/k-mer data/100k.txt 10'
   Time (mean ± σ):     11.859 s ±  1.608 s    [User: 11.758 s, System: 0.022 s]
 ```
 
@@ -78,13 +81,10 @@ void read_kmer(FILE *f, long position, int k, char *kmer) {
 }
 ```
 
-Et le résutlat du benchmark pour ce cas est légèrement plus difficile à analyser, selon les exécutions il y a plus ou moins 1s de plus ou moins. Mais la moyenne reste quand même en dessous et le range est plus petit (0.367s au lieu de 1.608s). Nous retiendrons le **10.399s** comme valeur "au milieu" des trois résultats.
+Et le résultat du benchmark pour ce cas est légèrement plus difficile à analyser, selon les exécutions il y a plus ou moins 1s de plus ou moins. Mais la moyenne reste quand même en dessous et le range est plus petit (0.367s au lieu de 1.608s). Nous retiendrons le **10.399s** comme valeur "au milieu" des trois résultats.
 ```
-Benchmark 1: ./build/k-mer data/100k.txt 10 > gen/100k.txt
   Time (mean ± σ):     10.000 s ±  0.367 s    [User: 9.942 s, System: 0.024 s]
-Benchmark 1: ./build/k-mer data/100k.txt 10 > gen/100k.txt
   Time (mean ± σ):     10.399 s ±  0.322 s    [User: 10.346 s, System: 0.016 s]
-Benchmark 1: ./build/k-mer data/100k.txt 10 > gen/100k.txt
   Time (mean ± σ):     11.073 s ±  0.656 s    [User: 11.006 s, System: 0.028 s]
 ```
 
@@ -93,9 +93,6 @@ Il reste encore une optimisation avec cette approche: Si il nous retourne pas la
 Notre code devient ainsi très court.
 
 ```c
-// Read k bytes at index "position" in file f
-// The hypothesis is that position <= file_size - k,
-// no error will be generated if less bytes are available after position.
 void read_kmer(FILE *f, long position, int k, char *kmer) {
     fseek(f, position, SEEK_SET);
     fread(kmer, sizeof(char), k, f);
@@ -104,9 +101,7 @@ void read_kmer(FILE *f, long position, int k, char *kmer) {
 
 Etonnement retirer le branchement, s'avère pire en moyenne et on a nouveau cette large plage de plus ou moins... Je n'arrive pas à comprendre le sens de cette histoire, c'est étrange. J'ai fixé sur le coeur 3 pour limiter les instabilités.
 ```sh
-Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10 > gen/100k.txt
-  Time (mean ± σ):     11.157 s ±  1.338 s    [User: 11.100 s, System: 0.016 s]
-  Range (min … max):   10.287 s … 12.698 s    3 runs
+Time (mean ± σ):     11.157 s ±  1.338 s    [User: 11.100 s, System: 0.016 s]
 ```
 
 J'ai aussi inliné la fonction comme elle était trop courte et probablement déjà inliné par `-O2` et plus simple à gérer sur place.
@@ -115,7 +110,6 @@ J'ai aussi inliné la fonction comme elle était trop courte et probablement dé
 Je n'étais pas sûr du fonctionnement de fseek, s'il était possible de "déplacer le curseur" sans faire de syscall, j'ai fait un programme séparé pour pouvoir compter les syscalls séparement.
 ```c
 #include <stdio.h>
-
 int main(int argc, char *argv[]) {
     char kmer[100];
     FILE *file = fopen("100k.txt", "r");
@@ -131,13 +125,13 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-On voit clairement que le syscall lseek est appelé à chaque appel de `fseek` puisqu'il y a le même nombre que de caractères.
+On voit clairement que le syscall `lseek` est appelé à chaque appel de `fseek` puisqu'il y a le même nombre que de caractères.
 ```sh
 > strace ./build/main &| grep lseek | wc -l
 100000
 ```
 
-Conclusion: se déplacer via le curseur de l'OS est probablement une très mauvaise idée comme il serait possible de déplacer un pointeur coté user space pour faire pareil. On pourrait lire tout le fichier une fois avec `fread` mais je vais partir sur `mmap` que je ne connais pas encore.
+Conclusion: se déplacer via le curseur de l'OS est probablement une très mauvaise idée comme il serait possible de déplacer un pointeur coté user space pour faire pareil. On pourrait lire tout le fichier une fois avec `fread` mais je vais partir sur `mmap` qui fait un chargement au fur et à mesure de l'usage.
 
 Ainsi après mappage dans le pointeur `content`, on peut changer ce morceau
 ```c
@@ -148,7 +142,7 @@ Ainsi après mappage dans le pointeur `content`, on peut changer ce morceau
         add_kmer(&table, kmer);
     }
 ```
-avec celui-ci, même plus besoin de copier les k caractères, on peut juste les référencer et ajouter la taille `k` à `add_kmer`
+avec celui-ci, même plus besoin de copier les k caractères, on peut juste les référencer et ajouter la taille `k` en paramètre de `add_kmer`
 ```c
     for (long i = 0; i <= file_size - k; i++) {
         add_kmer(&table, content + i, k);
@@ -178,6 +172,7 @@ mremap(0x7f3e009bd000, 430080, 856064, MREMAP_MAYMOVE) = 0x7f3e008ec000
 ```
 
 #### Optimisation de add_kmer par division en sous listes et propre memcmp
+<!--
 ```sh
 sam@sxp ~/H/y/H/H/l/code (main)> sudo perf record -e cycles --call-graph dwarf ./build/k-mer data/100k.txt 10
 > sudo perf annotate --stdio --source --dsos=./build/k-mer
@@ -187,11 +182,11 @@ The perf.data data has no samples!
 TODO ne marche pas pourquoi ?!
 sudo dnf debuginfo-install glibc
 sudo dnf debuginfo-install libstdc++
+-->
 
-Je vais passer un coup de profiling pour voir où est passé le plus de temps dans `add_kmer`, pour voir dans quelle direction améliorer pour commencer.
-Todo: expliquer perf annotate marche pas
 
-Je profile avec callgrind et seulement 3 et pas 10, parce que le temps de génération est trop lent pour `10`.
+<!-- Todo: expliquer perf annotate marche pas -->
+Je vais passer un coup de profiling pour voir où est passé le plus de temps dans `add_kmer`, pour voir dans quelle direction améliorer pour commencer.  Je profile avec callgrind et seulement 3 et pas 10, parce que le temps de génération est trop lent pour `10`.
 ```sh
 valgrind --tool=callgrind ./build/k-mer data/100k.txt 3
 ```
@@ -279,13 +274,13 @@ Time (mean ± σ):      1.143 s ±  0.011 s    [User: 1.133 s, System: 0.006 s]
 **Repassons un coup de profiling**
 On voit que le code en plus autour de `add_kmer` n'est pas devenu significatif, on passe de 99.8% à 98.3% seulement.
 ```c
- 289   │ 166,969,262 (98.31%)  => src/main.c:add_kmer (99,998x)
+166,969,262 (98.31%)  => src/main.c:add_kmer (99,998x)
 ```
 
 C'est toujours la partie recherche et comparaison de strings qui prend la plus grande proportion.
 ```c
- 200   │ 35,107,139 (20.67%)          if (memcmp(table->entries[i].kmer, kmer, k) == 0) {
- 201   │ 114,031,336 (67.14%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe (5,015,305x)
+35,107,139 (20.67%)          if (memcmp(table->entries[i].kmer, kmer, k) == 0) {
+114,031,336 (67.14%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe (5,015,305x)
 ```
 
 Je me demande si en évitant de comparer un caractère (le tout premier qui est déjà égal) dans le cas des lettres et nombres (pas du reste par contre), si on peut gagner du temps ou pas. Eh bien, il se trouve que non, on perd +30ms au lieu d'en gagner.
@@ -305,13 +300,10 @@ Time (mean ± σ):      1.011 s ±  0.008 s    [User: 1.002 s, System: 0.006 s]
 Cette fois-ci, la stratégie de skipper le premier caractère évoquée plus haut fonctionne et nous donne encore un gain important de +100ms, nous sommes maintenant à **884.0ms**.
 
 ```sh
-Benchmark 1: taskset -c 3 ./build/k-mer data/100k.txt 10
-  Time (mean ± σ):     834.5 ms ±   3.7 ms    [User: 827.2 ms, System: 5.0 ms]
-  Range (min … max):   828.4 ms … 839.0 ms    10 runs
+Time (mean ± σ):     834.5 ms ±   3.7 ms    [User: 827.2 ms, System: 5.0 ms]
 ```
 
-Je me suis rendu compte une heure plus tard que la stratégie en elle-même est incorrecte, car cela considère `Za` et `za` pareil, puisque je mets en minuscule le première caractère pour choisir la `KmerTable` pour `z` et `Z`, je ne peux pas ignorer le premier caractère au final. J'ai rétabli mon changement.
-
+Je me suis rendu compte une heure plus tard que la stratégie en elle-même est incorrecte, car cela considère `Za` et `za` pareil, puisque je mets en minuscule le première caractère pour choisir la `KmerTable` pour `z` et `Z`, je ne peux pas ignorer le premier caractère au final. J'ai rétabli la version précédente.
 
 #### Optimisation des comparaisons de groupe de 8 et 4 caractères
 En fait, la majorité du temps étant passée à comparer des strings, il est encore possible d'améliorer la performance en comparant plus d'un caractère à la fois ! Dans la même idée que le pattern du code SIMD, si `k=21`, on peut comparer 2 fois 8 bytes en les considérant comme deux `u_int64_t`, puis les bytes 17 à 21 c'est 4 bytes à considérer en `u_int32_t` puis finalement le dernier byte à gérer tout seul.
@@ -363,7 +355,7 @@ Pour valider cette hypothèse, si on mesure les cache-miss, en L1 on est actuell
 ```
 
 
-Si on teste le minimum nécessaire pour `32`, avec `#define MAX_KMER 33` au lieu de `100` et de voir qu'on passe à **12.26%** en L1 et **0.02%** en L3.
+Si on teste le minimum nécessaire pour `k=32`, avec `#define MAX_KMER 33` au lieu de `100`, on passe à **12.26%** en L1 et **0.02%** en L3, et cela se traduit aussi par un gain de temps: d'un coup les facteurs augmentent de 1.5-2 fois dès qu'on dépasse `k=4`!
 <!-- 
 ```sh
 > sudo taskset -c 3 perf stat -e L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses ./build/k-mer data/100k.txt 32
@@ -378,7 +370,7 @@ Si on teste le minimum nécessaire pour `32`, avec `#define MAX_KMER 33` au lieu
 ```
 -->
 
-et cela se traduit aussi par un gain de temps: d'un coup les facteurs augmentent de 1.5-2 fois dès qu'on dépasse `k=4`!
+
 
 **Attention: Dans tous les tableaux de cette section "Time before" se base sur le temps de la version avant la section précédente, pour voir si les facteurs augmentent vers les valeurs attendues.**
 | k | File | Time before | Time after | Improvement factor |
@@ -424,21 +416,25 @@ Si on pousse encore plus loin les tests avec le fichier `1m.txt`, l'overhead des
 |**64**|`1m.txt`|238.9192s|28.8191s|8.29x|
 
 
-### Conclusion
-J'ai travaillé sur de nombreux aspects afin d'améliorer le code existant mono-threadé, la majorité du temps était passée à chercher une entrée existante dans la liste et en comparant les caractères, cette partie a été optimisée un bon morceau. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. Je suis allé plus loin que demandé dans cette partie, mais j'ai pris du plaisir à chercher et améliorer ce code.
+### Conclusion de la préparation
+J'ai travaillé sur de nombreux aspects afin d'améliorer le code existant mono-threadé, la majorité du temps était passée à chercher une entrée existante dans la liste et en comparant les caractères, cette partie a été optimisée un bon morceau. Je suis allé plus loin que demandé dans cette partie parce que c'était vraiment fun de pousser le challenge si loin.
 
 Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 
-| Section | Temps | Facteur |
-| --------------- | --------------- | --------------- |
-| Départ | 16.210s | 1 |
-| Ouverture des fichiers | 14.314s | ? |
-| Flags de compilation  | 11.859s | ? |
-| Refactoring de read_kmer | 11.492s | ? |
-| Optimisation de add_kmer par division en sous listes et propre memcmp | 834.5ms | ? |
-| Optimisation des comparaisons de groupe de 8 et 4 caractères | 523.5ms | ? |
-| Optimisation de l'usage du cache | 200.9ms | ? |
+| Section                                                                 | Temps     |  Facteur relatif (à l'étape précédente) | Facteur absolu |
+| ----------------------------------------------------------------------- | --------- | ------------------------------- | ------------------------------ |
+| Départ                                                                  | **16.210s**   |  -                               | 1                              |
+| Ouverture des fichiers                                                  | 14.314s   |  1.133x                          | 1.133x                          |
+| Flags de compilation                                                    | 11.859s   |  1.207x                          | 1.367x                          |
+| Refactoring de read_kmer                                                | 11.492s   |  1.032x                          | 1.411x                          |
+| Optimisation de add_kmer par division en sous listes et propre memcmp   | 834.5ms   |  **13.77x**                           | 19.43x                          |
+| Optimisation des comparaisons de groupe de 8 et 4 caractères            | 523.5ms   |  1.595x                           | 30.97x                          |
+| Optimisation de l'usage du cache                                        | 200.9ms   |  2.605x                           | **80.70x**                          |
 
+
+On voit clairement que la section qui a diminué énormément la taille des listes et donc l'espace de recherche a eu un impact massif. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste.
+
+### Benchmark général pour développement du multithreading
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.

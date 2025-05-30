@@ -98,8 +98,8 @@ end
 
 set file 100k.txt
 for count in 5 6 7 8 10 20 55 64
-    hyperfine -r 1 --warmup 1 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
-    hyperfine -r 1 "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
+    hyperfine -r 3 --warmup 1 "taskset -c 3 ./build/$beforebin data/$file $count" --export-json out.json
+    hyperfine -r 3 "taskset -c 3 ./build/k-mer data/$file $count" --export-json out2.json
     append_results $count $file
 end
 
