@@ -144,6 +144,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     runKmersAlgo(content, file_size, 1, tablesStats, 1);
 
     // DUmp stats
+    printf("Printing stats of file:\n");
     for (int j = 0; j < ASCII_COUNT; j++) {
         size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
         printf("%d '%c': %zu\n", j, j, count);
@@ -185,7 +186,6 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
                 while (j < ASCII_COUNT) {
                     sum += counts[j];
                     if (counts[j] > 0) {
-                        printf("lastj is %d\n", j);
                         lastj = j;
                     }
                     j++;
@@ -205,10 +205,12 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         sums[thread] = sum;
         thread++;
     }
+
+    nbThreads = thread;// in case fewer threads we needed
     printf("Printing multi-threading strategy on %d threads with around %.2f concrete chars per thread\n", nbThreads, concreteCharsPerThread);
 
     for (int i = 0; i < nbThreads; i++) {
-        printf("Thread %d: [%d '%c'; %d '%c'] -> total of %d different chars (%zu concrete chars, nearest down count %zu) (%.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], sums[i] - counts[max[i]], ((float) sums[i]) / (float) file_size * 100);
+        printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars) (%.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
     }
     exit(2);
 
@@ -271,7 +273,7 @@ int main(int argc, char **argv) {
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    int nbThreads = 20;
+    int nbThreads = 7;
     runKmersAlgo(content, file_size, k, tables, nbThreads);
 
     // Show the results and free entries list as we go
