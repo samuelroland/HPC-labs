@@ -97,20 +97,14 @@ typedef struct {
     unsigned maxCharIndex;
     // Common args (equal for all threads)
     char *content;
-    size_t fileSize;
+    size_t file_size;
     int k;
     KmerTable *tables;
 } ThreadInfo;
 
 // Researching and inserting for a specific set of chars between given min and max index
 // this can be run in a separated thread or not, depending on the needs
-void manageKmersOnFile(ThreadInfo *info) {
-    char *content = info->content;
-    size_t file_size = info->fileSize;
-    int k = info->k;
-    KmerTable *tables = info->tables;
-    int min = info->minCharIndex;
-    int max = info->maxCharIndex;
+void manageKmersOnFile(char *content, size_t file_size, int k, KmerTable *tables, int min, int max) {
 
     // Start extracting, searching k-mer and saving them
     for (long i = 0; i <= file_size - k; i++) {
@@ -128,7 +122,7 @@ void manageKmersOnFile(ThreadInfo *info) {
 
 void *manageKmersOnFileThreaded(void *args) {
     ThreadInfo *info = (ThreadInfo *) args;
-    manageKmersOnFile(info);
+    manageKmersOnFile(info->content, info->file_size, info->k, info->tables, info->minCharIndex, info->maxCharIndex);
     return NULL;
 }
 
@@ -137,6 +131,69 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         init_kmer_table(tables + i);
     }
 
+    // If k is small, just run in single thread
+    if (k <= 2) {
+        manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
+        return;
+    }
+    // Otherwise start nbThreads or less
+
+    // Run a first time with k=1 to get statistics about present chars
+    KmerTable tablesStats[ASCII_COUNT];
+    runKmersAlgo(content, file_size, 1, tablesStats, 1);
+
+    float concreteCharsPerThread = (float) file_size / nbThreads;
+    int min[nbThreads];// min indexes for each thread
+    int max[nbThreads];// same for max
+
+    int j = 0;// index of ASCII_COUNT
+
+    // if (j >= ASCII_COUNT) TODO manage that
+
+    for (int i = 0; i < nbThreads; i++) {
+        // Skip holes of unused chars, to define the next min value on a used char
+        while (j < ASCII_COUNT && (tablesStats[j].count == 0 || tablesStats[j].entries[0].count == 0)) {
+            j++;
+        }
+        min[i] = j;
+
+        size_t sum = 0;
+        while (j < ASCII_COUNT) {
+            size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
+                                                                                          // printf("count for char %d is %zu\n", j, count);
+
+            // TODO: improve to last used char
+            if (i == nbThreads - 1) {
+                j = ASCII_COUNT;
+                break;
+            }
+            size_t sumPlusCount = sum + count;
+            // printf("file_size %zu, sumPlusCount %zu, concreteCharsPerThread %f, sum %zu, count %zu\n", file_size, sumPlusCount, concreteCharsPerThread, sum, count);
+            if (sumPlusCount > concreteCharsPerThread) {
+                // If the difference to the sum when adding the count is smaller, add it
+                if (concreteCharsPerThread - sum >= sumPlusCount - concreteCharsPerThread)
+                    sum = sumPlusCount;
+                break;// we reached the maximum
+            } else {
+                sum = sumPlusCount;
+            }
+            j++;
+        }
+
+        if (j >= ASCII_COUNT)
+            max[i] = ASCII_COUNT;
+        else
+            max[i] = j - 1;
+        // if (i != nbThreads - 1)
+        //     min[i + 1] = j;
+    }
+    printf("Printing multi-threading strategy\n");
+
+    for (int i = 0; i < nbThreads; i++) {
+        printf("Thread %d: [%d '%c'; %d '%c'] -> total of %d different chars (%f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, ((float) (max[i] - min[i] + 1)) / (float) ASCII_COUNT * 100);
+    }
+    exit(2);
+
     // Static cut of ASCII space
     int charsPerThread = ASCII_COUNT / nbThreads;
 
@@ -144,7 +201,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     for (int i = 0; i < nbThreads; i++) {
         // Copy common read only fields
         tinfo[i].content = content;
-        tinfo[i].fileSize = file_size;
+        tinfo[i].file_size = file_size;
         tinfo[i].k = k;
         tinfo[i].tables = tables;
 
@@ -165,6 +222,11 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     for (int i = 0; i < nbThreads; i++) {
         pthread_join(tinfo[i].thread_id, NULL);
     }
+
+    // Free tablesStats list
+    for (int i = 0; i < ASCII_COUNT; i++) {
+        free(tablesStats[i].entries);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -174,6 +236,7 @@ int main(int argc, char **argv) {
     }
 
     const char *input_file = argv[1];
+    printf("INPUT_FILE: %s\n", input_file);
     int k = atoi(argv[2]);
     if (k <= 0) {
         fprintf(stderr, "Error: k must be a positive integer.\n");

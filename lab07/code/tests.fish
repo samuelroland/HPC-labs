@@ -115,7 +115,7 @@ for file in $files
         # enable this line only the first time
         # hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
         # run multithreaded version more times
-        hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
+        hyperfine --max-runs $runs "set -o pipefail; taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
         color blue (cat percent)
         append_results $count $file
     end

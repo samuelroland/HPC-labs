@@ -31,3 +31,4 @@ perf.data*
 lab07/code/*.c
 lab07/code/*.md
 lab07/code/out
+lab07/code/percent
