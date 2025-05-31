@@ -125,30 +125,17 @@ void manageKmersOnFile(char *content, size_t file_size, int k, KmerTable *tables
     }
 }
 
+// Wrapper around manageKmersOnFile with unpacking of values inside the ThreadInfo passed as (void *)
 void *manageKmersOnFileThreaded(void *args) {
     ThreadInfo *info = (ThreadInfo *) args;
     manageKmersOnFile(info->content, info->file_size, info->k, info->tables, info->minCharIndex, info->maxCharIndex);
     return NULL;
 }
 
-void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads, bool printStrategy) {
-    for (int i = 0; i < ASCII_COUNT; i++) {
-        init_kmer_table(tables + i);
-    }
-
-    // If k is small, just run in single thread
-    if (k <= 1) {
-        manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
-        return;
-    }
-    // Otherwise start nbThreads or less
-
-    // Run a first time with k=1 to get statistics about present chars
-    KmerTable tablesStats[ASCII_COUNT];
-    runKmersAlgo(content, file_size, 1, tablesStats, 1, false);
-
-    // DUmp stats
-    if (printStrategy) {
+// The calculations to dynamically cut the ASCII chars space in nbThreads or less threads
+void calculateThreadRepartitionStrategy(KmerTable *tablesStats, char *content, size_t file_size, int nbThreads, bool printTheStrategy, int performantCoresMax, int *min, int *max, bool *priority) {
+    // Dump stats
+    if (printTheStrategy) {
         printf("Printing stats of file:\n");
         for (int j = 0; j < ASCII_COUNT; j++) {
             size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
@@ -168,10 +155,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     // If there are less chars than threads, we have to decrease the number of threads
     if (nonZeroCharsCount < nbThreads) nbThreads = nonZeroCharsCount;
 
-    int min[nbThreads], max[nbThreads];
-    bool priority[nbThreads];
     size_t sums[nbThreads];
-    int performantCoresMax = 4;     // 4 performance cores
     int attributedPriorityCount = 0;// will be <= performantCoresMax
 
     size_t remainingChars = file_size;// equivalent to the sum of remaining counts
@@ -240,17 +224,48 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
     nbThreads = threadIndex;// in case fewer threads we needed
 
-    if (printStrategy) {
+    if (printTheStrategy) {
         printf("Printing multi-threading strategy on %d threads \n", nbThreads);
 
         for (int i = 0; i < nbThreads; i++) {
-            printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars - %.2f%%)%s\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100, priority[i] ? " - PRIORITY" : "");
+            printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars - %.2f%%)%s\n",
+                   i, min[i],
+                   min[i],
+                   max[i],
+                   max[i],
+                   max[i] - min[i] + 1,
+                   sums[i],
+                   ((float) sums[i]) / (float) file_size * 100,
+                   priority[i] ? " - PRIORITY" : "");
         }
 
         exit(2);// we don't want to run if we print the strategy
     }
+}
+
+// Run the general algorithm, decide repartition of work for each thread, start them and wait them
+void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads, bool printTheStrategy) {
+    for (int i = 0; i < ASCII_COUNT; i++) {
+        init_kmer_table(tables + i);
+    }
+
+    // If k is small, just run in single thread
+    if (k <= 1) {
+        manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
+        return;
+    }
+
+    int performantCoresMax = 4;// 4 performance cores
+    // Run a first time with k=1 to get statistics about present chars
+    KmerTable charPresenceStats[ASCII_COUNT];
+    runKmersAlgo(content, file_size, 1, charPresenceStats, 1, false);
+
+    int min[nbThreads], max[nbThreads];
+    bool priority[nbThreads];
+    calculateThreadRepartitionStrategy(charPresenceStats, content, file_size, nbThreads, printTheStrategy, performantCoresMax, min, max, priority);
 
     ThreadInfo tinfo[nbThreads];
+
     for (int i = 0; i < nbThreads; i++) {
         // Copy common read only fields
         tinfo[i].content = content;
@@ -283,7 +298,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
     // Free tablesStats list
     for (int i = 0; i < ASCII_COUNT; i++) {
-        free(tablesStats[i].entries);
+        free(charPresenceStats[i].entries);
     }
 }
 

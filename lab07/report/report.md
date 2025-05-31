@@ -671,7 +671,37 @@ La plus grande augmentation de facteur de 2.98 à 3.78 pour le `1m.txt` sur `k=5
 * Une comparaison détaillée entre les performances des versions mono et multithreadée (temps d’exécution, scalabilité, goulots d’étranglement...).
 
 #### Gestion des petits fichiers ou petits k
+Les benchmarks précédents se sont concentrés sur des fichiers de grande taille, le multi-threading a été désactivé uniquement pour `k=1`. Hors les fichiers de petites tailles sont traités beaucoup plus rapidement que les grands, même avec un grand `k=600`, ce qui signifie que l'overhead des threads est parfois contre productive.
 
+Résumé des améliorations avant et après parallélisation.
+
+| k | File |  Improvement factor |
+| - | -- | - | 
+|**1**|`1k.txt`|0.42x|
+|**2**|`1k.txt`|0.33x|
+|**3**|`1k.txt`|0.40x|
+|**50**|`1k.txt`|0.34x|
+|**80**|`1k.txt`|0.34x|
+|**90**|`1k.txt`|0.34x|
+|**100**|`1k.txt`|0.33x|
+|**600**|`1k.txt`|0.35x|
+|**1**|`10k.txt`|0.38x|
+|**2**|`10k.txt`|0.36x|
+|**3**|`10k.txt`|0.65x|
+|**50**|`10k.txt`|0.74x|
+|**90**|`10k.txt`|0.79x|
+|**100**|`10k.txt`|0.81x|
+|**600**|`10k.txt`|0.54x|
+|**1**|`100k.txt`|0.39x|
+|**2**|`100k.txt`|0.67x|
+|**3**|`100k.txt`|**1.81x**|
+|**50**|`100k.txt`|2.75x|
+|**80**|`100k.txt`|2.63x|
+|**90**|`100k.txt`|2.63x|
+|**100**|`100k.txt`|2.63x|
+|**600**|`100k.txt`|2.18x|
+
+Je vais juste désactiver la parallélisation pour les fichiers en dessous de 100k.
 
 #### Conclusion parallélisation
 
