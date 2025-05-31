@@ -516,7 +516,7 @@ J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time
 hyperfine --max-runs $runs "taskset -c 1-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
 ```
 
-Le pourcentage espéré est de 1000% (100% sur 10 coeurs).
+Le pourcentage espéré est de 1000% (100% sur 10 coeurs). Le code de stratégie a été implémentée dans `calculateThreadRepartitionStrategy()` afin de simplifier la relecture.
 
 #### Parallélisation avec répartition statique
 On voit que le temps n'a fait qu'augmenter pour `1m.txt`, c'est normal, aucun thread n'a fait du travail utile sauf le seul qui avait la plage des numéros. On a plus de temps à cause de l'overhead de création des threads. `ascii-1m.txt` a été géré plus rapidement, entre 2 et 2.5 fois plus rapidement, c'est déjà un gain mais cela me parait bizarre que cela soit si petit au vu des 10 threads. Finalement le facteur de 1.6-1.7 pour `10m.en.txt` s'explique par le fait que les caractères sont inéquitablement répartis, une partie des threads travaillent probablement beaucoup plus que les autres.
@@ -673,35 +673,96 @@ La plus grande augmentation de facteur de 2.98 à 3.78 pour le `1m.txt` sur `k=5
 #### Gestion des petits fichiers ou petits k
 Les benchmarks précédents se sont concentrés sur des fichiers de grande taille, le multi-threading a été désactivé uniquement pour `k=1`. Hors les fichiers de petites tailles sont traités beaucoup plus rapidement que les grands, même avec un grand `k=600`, ce qui signifie que l'overhead des threads est parfois contre productive.
 
-Résumé des améliorations avant et après parallélisation.
+Comme on arrive en dessous la milliseconde, hyperfine nous averti de désactiver le shell si possible (car il n'arrive pas estimer le temps de démarrage de celui-ci) ce qu'on fait avec l'option `-N`. Au début de mon analyse j'utilisais les commandes suivantes. Le problème est que la commande `taskset`, `time` et `grep` prennent un temps de l'ordre du dizième de millisecondes, ce qui impactait le résultat !
 
-| k | File |  Improvement factor |
-| - | -- | - | 
-|**1**|`1k.txt`|0.42x|
-|**2**|`1k.txt`|0.33x|
-|**3**|`1k.txt`|0.40x|
-|**50**|`1k.txt`|0.34x|
-|**80**|`1k.txt`|0.34x|
-|**90**|`1k.txt`|0.34x|
-|**100**|`1k.txt`|0.33x|
-|**600**|`1k.txt`|0.35x|
-|**1**|`10k.txt`|0.38x|
-|**2**|`10k.txt`|0.36x|
-|**3**|`10k.txt`|0.65x|
-|**50**|`10k.txt`|0.74x|
-|**90**|`10k.txt`|0.79x|
-|**100**|`10k.txt`|0.81x|
-|**600**|`10k.txt`|0.54x|
-|**1**|`100k.txt`|0.39x|
-|**2**|`100k.txt`|0.67x|
-|**3**|`100k.txt`|**1.81x**|
-|**50**|`100k.txt`|2.75x|
-|**80**|`100k.txt`|2.63x|
-|**90**|`100k.txt`|2.63x|
-|**100**|`100k.txt`|2.63x|
-|**600**|`100k.txt`|2.18x|
+```sh
+hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count"
+hyperfine --max-runs $runs "set -o pipefail; taskset -c 0-9 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
+```
 
-Je vais juste désactiver la parallélisation pour les fichiers en dessous de 100k.
+J'ai changé par ces 2 commandes simplifiée pour cette partie, `taskset` étant à l'extérieur et ayant retiré le calcul du pourcentage de CPU, on retrouve des statistiques qui font sens.
+
+```sh
+taskset -c 3 hyperfine --max-runs $runs -N "./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
+taskset -c 0-9 hyperfine --max-runs $runs -N "./build/k-mer data/$file $count" --export-json new.$file.$count.out.json
+```
+
+Résumé des améliorations avant et après parallélisation. L'overhead des threads et peut-être d'autres choses à ralentis par 2-3 tout une partie des cas. Ce qui est étonnant c'est le **0.59x** pour k=1 sans parallélisation...
+
+
+| k | File | Time before | Time after |  Improvement factor |
+| - | -- | - | - | - | 
+|**1**|`1k.txt`|0.0003s|0.0005s|**0.59x**|
+|**2**|`1k.txt`|0.0003s|0.0008s|0.36x|
+|**3**|`1k.txt`|0.0004s|0.0009s|0.44x|
+|**10**|`1k.txt`|0.0004s|0.0009s|0.45x|
+|**50**|`1k.txt`|0.0004s|0.0009s|0.47x|
+|**100**|`1k.txt`|0.0004s|0.0009s|0.46x|
+|**600**|`1k.txt`|0.0004s|0.0009s|0.40x|
+|**1**|`10k.txt`|0.0003s|0.0005s|0.67x|
+|**2**|`10k.txt`|0.0005s|0.0009s|0.51x|
+|**3**|`10k.txt`|0.0013s|0.0011s|**1.16x**|
+|**4**|`10k.txt`|0.0019s|0.0018s|1.04x|
+|**5**|`10k.txt`|0.0029s|0.0022s|1.27x|
+|**6**|`10k.txt`|0.0030s|0.0024s|1.26x|
+|**7**|`10k.txt`|0.0028s|0.0023s|1.22x|
+|**8**|`10k.txt`|0.0027s|0.0025s|1.08x|
+|**9**|`10k.txt`|0.0028s|0.0024s|1.13x|
+|**10**|`10k.txt`|0.0027s|0.0022s|1.18x|
+|**100**|`10k.txt`|0.0027s|0.0024s|1.09x|
+|**600**|`10k.txt`|0.0027s|0.0027s|0.99x|
+|**1**|`100k.txt`|0.0005s|0.0009s|0.57x|
+|**2**|`100k.txt`|0.0017s|0.0021s|0.84x|
+|**3**|`100k.txt`|0.0090s|0.0038s|2.37x|
+|**4**|`100k.txt`|0.0195s|0.0084s|2.32x|
+|**5**|`100k.txt`|0.1154s|0.0383s|3.01x|
+|**6**|`100k.txt`|0.1884s|0.0590s|3.19x|
+|**7**|`100k.txt`|0.1986s|0.0619s|3.21x|
+|**8**|`100k.txt`|0.1983s|0.0692s|2.86x|
+|**9**|`100k.txt`|0.1977s|0.0705s|2.80x|
+|**10**|`100k.txt`|0.1978s|0.0695s|2.84x|
+|**11**|`100k.txt`|0.1977s|0.0700s|2.82x|
+|**15**|`100k.txt`|0.1983s|0.0739s|2.68x|
+|**20**|`100k.txt`|0.1984s|0.0704s|2.82x|
+|**30**|`100k.txt`|0.1984s|0.0716s|2.77x|
+|**40**|`100k.txt`|0.1987s|0.0695s|2.85x|
+|**50**|`100k.txt`|0.1985s|0.0711s|2.79x|
+|**80**|`100k.txt`|0.1991s|0.0731s|2.72x|
+|**90**|`100k.txt`|0.1989s|0.0741s|2.68x|
+|**100**|`100k.txt`|0.2000s|0.0749s|2.67x|
+|**600**|`100k.txt`|0.2003s|0.0788s|2.54x|
+
+Je vais juste désactiver la parallélisation pour les fichiers en dessous de 10k et pour k<3 puisque c'est à partir de 10k et k=3 que l'on repasse à un. Les résultats ne changent que très peu, les facteurs sont remontés de 2x ou 1.5x. Par exemple on passe de 0.44x à 0.72x pour `k=3` et `1k.txt`
+
+| k | File | Time before | Time after | Improvement factor |
+| - | -- | - | - | - |
+|**1**|`1k.txt`|0.0003s|0.0005s|0.66x|
+|**2**|`1k.txt`|0.0003s|0.0005s|0.68x|
+|**3**|`1k.txt`|0.0004s|0.0006s|0.72x|
+|**4**|`1k.txt`|0.0004s|0.0007s|0.61x|
+|**5**|`1k.txt`|0.0004s|0.0007s|0.61x|
+|**6**|`1k.txt`|0.0004s|0.0007s|0.59x|
+|**7**|`1k.txt`|0.0004s|0.0006s|0.66x|
+|**8**|`1k.txt`|0.0004s|0.0006s|0.65x|
+|**9**|`1k.txt`|0.0004s|0.0006s|0.64x|
+|**10**|`1k.txt`|0.0004s|0.0006s|0.65x|
+|**11**|`1k.txt`|0.0004s|0.0007s|0.58x|
+|**15**|`1k.txt`|0.0004s|0.0006s|0.70x|
+|**20**|`1k.txt`|0.0004s|0.0006s|0.59x|
+|**30**|`1k.txt`|0.0004s|0.0006s|0.56x|
+|**40**|`1k.txt`|0.0004s|0.0007s|0.61x|
+|**50**|`1k.txt`|0.0004s|0.0007s|0.56x|
+|**80**|`1k.txt`|0.0004s|0.0006s|0.62x|
+|**90**|`1k.txt`|0.0004s|0.0007s|0.56x|
+|**100**|`1k.txt`|0.0004s|0.0006s|0.57x|
+|**600**|`1k.txt`|0.0003s|0.0007s|0.49x|
+|**1**|`10k.txt`|0.0003s|0.0006s|0.55x|
+|**2**|`10k.txt`|0.0004s|0.0007s|0.63x|
+|**3**|`10k.txt`|0.0012s|0.0011s|1.03x|
+|**4**|`10k.txt`|0.0018s|0.0018s|0.99x|
+|**5**|`10k.txt`|0.0026s|0.0023s|1.15x|
+
+En fait la différence est super minime, seulement 0.2ms, peut-être que cela est du à la gestion de plus de liste qu'auparavant.
 
 #### Conclusion parallélisation
 

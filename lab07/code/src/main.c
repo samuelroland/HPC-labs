@@ -12,6 +12,8 @@
 #include <sys/types.h>
 
 #define DEFAULT_THREADS_NUMBER 10
+#define MINIMUM_FILE_SIZE_TO_ENABLE_MULTITHREADING 10000// 10k at minimum
+#define MINIMUM_K_TO_ENABLE_MULTITHREADING 3
 
 typedef struct {
     const char *kmer;// a pointer on the first char, of a string of length k, without a null byte as we are pointing on the original buffer
@@ -249,10 +251,15 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         init_kmer_table(tables + i);
     }
 
-    // If k is small, just run in single thread
-    if (k <= 1) {
-        manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
-        return;
+    // If k is small or the file is too small, just run in the current thread
+    if (k < MINIMUM_K_TO_ENABLE_MULTITHREADING || file_size < MINIMUM_FILE_SIZE_TO_ENABLE_MULTITHREADING) {
+        if (printTheStrategy) {
+            printf("The strategy is to NOT use multi-threading for this small file or small k.\n");
+            return;
+        } else {
+            manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
+            return;
+        }
     }
 
     int performantCoresMax = 4;// 4 performance cores
