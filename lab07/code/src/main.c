@@ -9,6 +9,8 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 
+#define DEFAULT_THREADS_NUMBER 10
+
 typedef struct {
     const char *kmer;// a pointer on the first char, of a string of length k, without a null byte as we are pointing on the original buffer
     unsigned count;
@@ -127,13 +129,13 @@ void *manageKmersOnFileThreaded(void *args) {
     return NULL;
 }
 
-void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads) {
+void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int nbThreads, bool printStrategy) {
     for (int i = 0; i < ASCII_COUNT; i++) {
         init_kmer_table(tables + i);
     }
 
     // If k is small, just run in single thread
-    if (k <= 2) {
+    if (k <= 1) {
         manageKmersOnFile(content, file_size, k, tables, 0, ASCII_COUNT - 1);
         return;
     }
@@ -141,13 +143,15 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
     // Run a first time with k=1 to get statistics about present chars
     KmerTable tablesStats[ASCII_COUNT];
-    runKmersAlgo(content, file_size, 1, tablesStats, 1);
+    runKmersAlgo(content, file_size, 1, tablesStats, 1, false);
 
     // DUmp stats
-    printf("Printing stats of file:\n");
-    for (int j = 0; j < ASCII_COUNT; j++) {
-        size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
-        printf("%d '%c': %zu\n", j, j, count);
+    if (printStrategy) {
+        printf("Printing stats of file:\n");
+        for (int j = 0; j < ASCII_COUNT; j++) {
+            size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
+            printf("%d '%c': %zu\n", j, j, count);
+        }
     }
 
     // This logic has been debugged with the help of Copilot as it is pretty easy to get wrong
@@ -171,6 +175,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
     // Continue while all chars have not been considered and we still have threads to assign for
     while (threadIndex < nbThreads && charIndex < ASCII_COUNT) {
+        bool applyBiggerRangeFirstThread = threadIndex == 0 && nonZeroCharsCount > nbThreads;
 
         // Calculate dynamically for remaining work
         float concreteCharsPerThread = (float) remainingChars / remainingThreads;
@@ -201,7 +206,7 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
             }
 
             // If we are the first thread, just take chars until we go over the concreteCharsPerThread
-            if (threadIndex == 0) {
+            if (applyBiggerRangeFirstThread) {
                 if (sum > concreteCharsPerThread)
                     break;
             } else {// Otherwise, we want to minimize the distance to concreteCharsPerThread when deciding if we go over or not
@@ -220,12 +225,16 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     }
 
     nbThreads = threadIndex;// in case fewer threads we needed
-    printf("Printing multi-threading strategy on %d threads \n", nbThreads);
 
-    for (int i = 0; i < nbThreads; i++) {
-        printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars) (%.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
+    if (printStrategy) {
+        printf("Printing multi-threading strategy on %d threads \n", nbThreads);
+
+        for (int i = 0; i < nbThreads; i++) {
+            printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars - %.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
+        }
+
+        exit(2);// we don't want to run if we print the strategy
     }
-    exit(2);
 
     // Static cut of ASCII space
     int charsPerThread = ASCII_COUNT / nbThreads;
@@ -259,13 +268,12 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <input_file> <k>\n", argv[0]);
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <input_file> <k> [--strategy]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     const char *input_file = argv[1];
-    printf("INPUT_FILE: %s\n", input_file);
     int k = atoi(argv[2]);
     if (k <= 0) {
         fprintf(stderr, "Error: k must be a positive integer.\n");
@@ -277,6 +285,11 @@ int main(int argc, char **argv) {
         perror("Error opening file");
         return EXIT_FAILURE;
     }
+    bool printStrategy = false;
+    if (argc >= 4 && strcmp(argv[3], "--strategy") == 0) {
+        printf("INPUT_FILE: %s\n", input_file);
+        printStrategy = true;
+    }
 
     fseek(file, 0, SEEK_END);
     size_t file_size = ftell(file);
@@ -286,8 +299,7 @@ int main(int argc, char **argv) {
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    int nbThreads = 10;
-    runKmersAlgo(content, file_size, k, tables, nbThreads);
+    runKmersAlgo(content, file_size, k, tables, DEFAULT_THREADS_NUMBER, printStrategy);
 
     // Show the results and free entries list as we go
     printf("Results:\n");

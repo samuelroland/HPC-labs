@@ -506,10 +506,10 @@ De par son indépendance et son absence complet de section critiques, je vais pr
 
 TODO: fix les typos avec language tool !!!
 
-J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time -v` pour récupérer un pourcentage d'usage des CPUs globalement, pour avoir une idée d'à quel point on utilise bien nos 10 coeurs. Je pin les threads sur les coeurs 2 à 11. En théorie, il y a 11 threads qui vont tourner (thread principal + 10 démarrés) mais le thread principal ne fera que d'attendre quand les autres travaillent donc je n'attribue pas plus de coeurs physiques.
+J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time -v` pour récupérer un pourcentage d'usage des CPUs globalement, pour avoir une idée d'à quel point on utilise bien nos 10 coeurs. Je pin les threads sur les coeurs 1 à 11 (comme il y a 11 threads qui vont tourner (thread principal + 10 démarrés).
 
 ```sh
-hyperfine --max-runs $runs "taskset -c 2-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
+hyperfine --max-runs $runs "taskset -c 1-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent"
 ```
 
 Le pourcentage espéré est de 1000% (100% sur 10 coeurs).
@@ -542,6 +542,30 @@ Benchmark 1: ./build/k-mer ./data/ascii-1m.txt 1
 Cela nous donne des compteurs exactes du nombre de fois que se trouve chaque caractère, permettant ainsi de faire des groupes de caractères contigus. Pour choisir combien de caractère mettre dans ces groupes, on se base sur la longueur des listes, en les sommant on s'arrête juste avant ou après dépasser le nombre `taille du fichier / nombre de threads`. Il faut évidemment que cette préparation soit négligeable pour ne pas créer d'overhead significatif sur le programme.
 
 Pour le fichier `1m.txt`, on va pouvoir ainsi compléter ignorer les caractères non numérique comme on sait qu'il n'y a aucun et dédier un thread par chiffre!
+
+J'ai ajouté un flag `--strategy` à la fin (ce qui reste rétrocompatible en terme d'interface), pour afficher la stratégie de répartition des caractères ASCII entre threads au lieu de lancer l'exécution.
+```sh
+./build/k-mer data/ascii-gen/ascii-1m.clean.txt 5 --strategy
+```
+
+Cette stratégie ne prend comme imaginé pas vraiment plus de temps que le premier tour avec `k=1`.
+```sh
+> hyperfine './build/k-mer data/ascii-gen/ascii-1m.clean.txt 5 --strategy' -i
+Time (mean ± σ):       3.4 ms ±   0.5 ms    [User: 2.8 ms, System: 0.6 ms]
+```
+
+
+| k | File | Time before | Time after | CPU usage | Improvement factor |
+| - | -- | - | - | - | - |
+|**2**|`1m.txt`|0.0162s|0.0126s|490%|1.28x|
+|**5**|`1m.txt`|2.2940s|0.5791s|768%|3.96x|
+|**50**|`1m.txt`|27.9965s|8.1402s|766%|3.43x|
+|**2**|`ascii-1m.txt`|0.0449s|0.0189s|680%|2.37x|
+|**5**|`ascii-1m.txt`|4.1614s|1.4647s|785%|2.84x|
+|**50**|`ascii-1m.txt`|4.2618s|1.6205s|770%|2.62x|
+|**2**|`10m.en.txt`|0.1955s|0.1247s|484%|1.56x|
+|**5**|`10m.en.txt`|4.6121s|2.2036s|452%|2.09x|
+|**50**|`10m.en.txt`|23.3860s|13.6771s|306%|1.70x|
 
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
