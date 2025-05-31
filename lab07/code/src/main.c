@@ -167,52 +167,59 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
     size_t remainingChars = file_size;// equivalent to the sum of remaining counts
     int remainingThreads = nbThreads;
-    int j = 0, thread = 0;
-    while (thread < nbThreads && j < ASCII_COUNT) {
-        // Skip unused chars
-        while (j < ASCII_COUNT && counts[j] == 0)
-            j++;
-        if (j >= ASCII_COUNT) break;
+    int charIndex = 0, threadIndex = 0;
 
-        min[thread] = j;
-        size_t sum = 0;
+    // Continue while all chars have not been considered and we still have threads to assign for
+    while (threadIndex < nbThreads && charIndex < ASCII_COUNT) {
 
         // Calculate dynamically for remaining work
         float concreteCharsPerThread = (float) remainingChars / remainingThreads;
 
-        int lastj = j;
-        while (j < ASCII_COUNT) {
-            size_t count = counts[j];
+        // Skip unused chars before assigning the min index
+        while (charIndex < ASCII_COUNT && counts[charIndex] == 0)
+            charIndex++;
+        if (charIndex >= ASCII_COUNT) break;
+        min[threadIndex] = charIndex;
+
+        // Calculate the max
+        size_t sum = 0;
+        int lastNonZeroCountCharIndex = charIndex;// the last char where the count is not zero
+        while (charIndex < ASCII_COUNT) {
+            size_t count = counts[charIndex];
 
             // For the last thread, Take all chars until the last non zero index assigned to lastj
-            if (thread == nbThreads - 1) {
+            if (threadIndex == nbThreads - 1) {
                 sum += count;
-                while (j < ASCII_COUNT) {
-                    sum += counts[j];
-                    if (counts[j] > 0) {
-                        lastj = j;
+                while (charIndex < ASCII_COUNT) {
+                    sum += counts[charIndex];
+                    if (counts[charIndex] > 0) {
+                        lastNonZeroCountCharIndex = charIndex;
                     }
-                    j++;
+                    charIndex++;
                 }
                 break;
             }
 
-            // printf("%.2f <= %.2f\n", fabsf(concreteCharsPerThread - sum), fabsf(concreteCharsPerThread - (sum + count)));
-            if (sum > 0 && (fabsf(concreteCharsPerThread - sum) <= fabsf(concreteCharsPerThread - (sum + count))))
-                break;
-
+            // If we are the first thread, just take chars until we go over the concreteCharsPerThread
+            if (threadIndex == 0) {
+                if (sum > concreteCharsPerThread)
+                    break;
+            } else {// Otherwise, we want to minimize the distance to concreteCharsPerThread when deciding if we go over or not
+                if (sum > 0 && (fabsf(concreteCharsPerThread - sum) <= fabsf(concreteCharsPerThread - (sum + count))))
+                    break;
+            }
             sum += count;
-            lastj = j;
-            j++;
+            lastNonZeroCountCharIndex = charIndex;
+            charIndex++;
         }
-        max[thread] = lastj;
-        sums[thread] = sum;
+        max[threadIndex] = lastNonZeroCountCharIndex;
+        sums[threadIndex] = sum;
         remainingChars -= sum;
         remainingThreads--;
-        thread++;
+        threadIndex++;
     }
 
-    nbThreads = thread;// in case fewer threads we needed
+    nbThreads = threadIndex;// in case fewer threads we needed
     printf("Printing multi-threading strategy on %d threads \n", nbThreads);
 
     for (int i = 0; i < nbThreads; i++) {
@@ -279,7 +286,7 @@ int main(int argc, char **argv) {
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    int nbThreads = 6;
+    int nbThreads = 10;
     runKmersAlgo(content, file_size, k, tables, nbThreads);
 
     // Show the results and free entries list as we go
