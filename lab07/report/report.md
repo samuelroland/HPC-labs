@@ -498,6 +498,10 @@ En effet, plusieurs race conditions peuvent arriver:
 
 Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle, ça tombe bien puisque c'est justement la recherche qui prend le plus de temps. Par contre, l'écriture du compteur, insertions ou les réallocs doivent se faire sans que personne ne lise la liste associée.
 
+Je considère que mon code tourne sur une machine de 10 coeurs (la mienne en a 12) avec 4 coeurs performance sur les numéros 0-3. Je vais donc démarrer 10 threads au maximum ou moins si cela ne fait pas sens.
+
+TODO supposition performance core number okay ??
+
 Pour respecter ces contraintes, je vois deux approches possibles, en considérant 10 threads disponibles:
 1. Découper le fichier en morceaux équivalents pour 9 threads. Avoir un thread qui gère tout ce qui écriture, et 9 autres travaillent à gérer les kmers sur leur section du fichier. Pour protéger la sous liste spécifique dans laquelle il y aura une modification, on retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs thread lecteurs ou tout seul pour un thread rédacteur. On aurait besoin de ce système pour chaque sous liste. L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible, permet de bloquer seulement une liste à la fois en écriture et bloquer temporairement uniquement une partie des threads lecteurs.
 1. Découper l'espace des caractères ASCII pour grouper certaines sous listes ensembles. Chaque thread cherche ainsi les caractères dans une plage donnée (par ex. de `A` à `R`) en parcourant tout le fichier et ignorant tous les caractères hors de la plage. Une fois un kmer trouvé, il le gère lui-même. Chaque thread lit tout le fichier mais il n'y aucune opération d'écriture sur le fichier donc cela ne pose pas soucis. Comme chaque thread travaille sur un sous ensemble de liste bien différentes des autres, il n'y a aucun accès écriture et lecture à une zone partagé. Pas de section critique à gérer donc.
@@ -553,25 +557,133 @@ Cette stratégie ne prend comme imaginé pas vraiment plus de temps que le premi
 > hyperfine './build/k-mer data/ascii-gen/ascii-1m.clean.txt 5 --strategy' -i
 Time (mean ± σ):       3.4 ms ±   0.5 ms    [User: 2.8 ms, System: 0.6 ms]
 ```
+Si on inspecte la stratégie pour `ascii-1m.txt`, les caractères sont bien répartis, un par thread, même si malheureusement le double du travail devra être fait par le dernier thread le numéro 9 étant doublement présent.
+```sh
+Printing multi-threading strategy on 10 threads 
+Thread 0: [48 '0'; 48 '0'] -> 1 different chars (99959 concrete chars - 10.00%)
+Thread 1: [49 '1'; 49 '1'] -> 1 different chars (99758 concrete chars - 9.98%)
+Thread 2: [50 '2'; 50 '2'] -> 1 different chars (100026 concrete chars - 10.00%)
+Thread 3: [51 '3'; 51 '3'] -> 1 different chars (100229 concrete chars - 10.02%)
+Thread 4: [52 '4'; 52 '4'] -> 1 different chars (100230 concrete chars - 10.02%)
+Thread 5: [53 '5'; 53 '5'] -> 1 different chars (100359 concrete chars - 10.04%)
+Thread 6: [54 '6'; 54 '6'] -> 1 different chars (99548 concrete chars - 9.95%)
+Thread 7: [55 '7'; 55 '7'] -> 1 different chars (99800 concrete chars - 9.98%)
+Thread 8: [56 '8'; 56 '8'] -> 1 different chars (99985 concrete chars - 10.00%)
+Thread 9: [57 '9'; 57 '9'] -> 1 different chars (200212 concrete chars - 20.02%)
+```
 
+Si on inspecte la stratégie pour `ascii-1m.txt`, le temps est plutôt bien réparti
+```sh
+Printing multi-threading strategy on 10 threads 
+Thread 0: [32 ' '; 41 ')'] -> 10 different chars (105113 concrete chars - 10.51%)
+Thread 1: [42 '*'; 50 '2'] -> 9 different chars (94920 concrete chars - 9.49%)
+Thread 2: [51 '3'; 59 ';'] -> 9 different chars (94803 concrete chars - 9.48%)
+Thread 3: [60 '<'; 69 'E'] -> 10 different chars (105389 concrete chars - 10.54%)
+Thread 4: [70 'F'; 78 'N'] -> 9 different chars (95150 concrete chars - 9.51%)
+Thread 5: [79 'O'; 88 'X'] -> 10 different chars (105246 concrete chars - 10.52%)
+Thread 6: [89 'Y'; 98 'b'] -> 10 different chars (105150 concrete chars - 10.51%)
+Thread 7: [99 'c'; 107 'k'] -> 9 different chars (94875 concrete chars - 9.49%)
+Thread 8: [108 'l'; 117 'u'] -> 10 different chars (104724 concrete chars - 10.47%)
+Thread 9: [118 'v'; 126 '~'] -> 9 different chars (105052 concrete chars - 10.51%)
+```
+
+**Note: la colonne Time before fait référence à la dernière version single thread.**
 
 | k | File | Time before | Time after | CPU usage | Improvement factor |
 | - | -- | - | - | - | - |
-|**2**|`1m.txt`|0.0162s|0.0126s|490%|1.28x|
-|**5**|`1m.txt`|2.2940s|0.5791s|768%|3.96x|
-|**50**|`1m.txt`|27.9965s|8.1402s|766%|3.43x|
-|**2**|`ascii-1m.txt`|0.0449s|0.0189s|680%|2.37x|
-|**5**|`ascii-1m.txt`|4.1614s|1.4647s|785%|2.84x|
-|**50**|`ascii-1m.txt`|4.2618s|1.6205s|770%|2.62x|
-|**2**|`10m.en.txt`|0.1955s|0.1247s|484%|1.56x|
-|**5**|`10m.en.txt`|4.6121s|2.2036s|452%|2.09x|
-|**50**|`10m.en.txt`|23.3860s|13.6771s|306%|1.70x|
+|**2**|`1m.txt`|0.0162s|0.0128s|520%|1.26x|
+|**5**|`1m.txt`|2.2940s|0.5791s|778%|3.96x|
+|**50**|`1m.txt`|27.9965s|9.3944s|830%|2.98x|
+|**2**|`ascii-1m.txt`|0.0449s|0.0201s|594%|2.23x|
+|**5**|`ascii-1m.txt`|4.1614s|1.5590s|806%|2.66x|
+|**50**|`ascii-1m.txt`|4.2618s|1.6562s|741%|2.57x|
+|**2**|`10m.en.txt`|0.1955s|0.1282s|470%|1.52x|
+|**5**|`10m.en.txt`|4.6121s|2.1537s|472%|2.14x|
+|**50**|`10m.en.txt`|23.3860s|13.0733s|313%|1.78x|
 
+Les cache misses restent plutôt limités, le fichier de 1MB tient probablement entièrement en cache L3 (qui fait 12MB) et
+```sh
+> sudo taskset -c 1-11 perf stat -e L1-dcache-loads,L1-dcache-load-misses,LLC-loads,LLC-load-misses ./build/k-mer data/1m.txt 50
+   301,651,971,638      cpu_core/L1-dcache-loads/                                               (24.52%)
+     8,911,530,149      cpu_core/L1-dcache-load-misses/  #    2.95% of all L1-dcache accesses   (24.52%)
+       852,664,357      cpu_core/LLC-loads/                                                     (24.52%)
+         7,461,538      cpu_core/LLC-load-misses/        #    0.88% of all LL-cache accesses    (24.52%)
+```
+
+Le dernier cas est étonnement peu performant, en affichant la stratégie on voit que le thread 0 a le double de travail des autres threads et qu'il travaille sur les caractère espace et retour à la ligne, qui sont très présents, ce qui signifie des longues listes respectives.
+```sh
+9 '	': 6550
+10 '
+': 251250
+...
+30 '': 0
+31 '': 0
+32 ' ': 1662450
+Printing multi-threading strategy on 10 threads 
+Thread 0: [9 '	'; 32 ' '] -> 24 different chars (1920250 concrete chars - 18.34%)
+Thread 1: [33 '!'; 60 '<'] -> 28 different chars (952500 concrete chars - 9.10%)
+Thread 2: [61 '='; 97 'a'] -> 37 different chars (1176000 concrete chars - 11.23%)
+Thread 3: [98 'b'; 100 'd'] -> 3 different chars (605100 concrete chars - 5.78%)
+Thread 4: [101 'e'; 102 'f'] -> 2 different chars (913100 concrete chars - 8.72%)
+Thread 5: [103 'g'; 107 'k'] -> 5 different chars (916250 concrete chars - 8.75%)
+Thread 6: [108 'l'; 110 'n'] -> 3 different chars (1012300 concrete chars - 9.67%)
+Thread 7: [111 'o'; 114 'r'] -> 4 different chars (1118900 concrete chars - 10.69%)
+Thread 8: [115 's'; 116 't'] -> 2 different chars (1091550 concrete chars - 10.42%)
+Thread 9: [117 'u'; 126 '~'] -> 10 different chars (938450 concrete chars - 8.96%)
+```
+En affichant les timestamps de fin, on voit bien que ce thread 0 finit en dernier, bien après les autres.
+```sh
+> time ./build/k-mer data/10m.en.txt 50
+15:56:09:340 - Thread 140333950166720 is done (from '!' to '<')
+15:56:09:599 - Thread 140333916595904 is done (from 'l' to 'n')
+15:56:09:609 - Thread 140333820143296 is done (from 'u' to '~')
+15:56:09:794 - Thread 140333908203200 is done (from 'o' to 'r')
+15:56:09:978 - Thread 140333933381312 is done (from 'b' to 'd')
+15:56:10:679 - Thread 140333941774016 is done (from '=' to 'a')
+15:56:10:825 - Thread 140333924988608 is done (from 'g' to 'k')
+15:56:12:010 - Thread 140333828536000 is done (from 's' to 't')
+15:56:13:149 - Thread 140333788690112 is done (from 'e' to 'f')
+15:56:20:522 - Thread 140333958559424 is done (from '	' to ' ')
+```
+
+Cette stratégie a cette limite de ne pas être la plus adaptée si un caractère est très présent par rapport à d'autres comme ici 1.6millions d'espaces.
+
+
+#### Parallélisation avec priorisation de certain threads sur des performances cores
+La plus grande augmentation de facteur de 2.98 à 3.78 pour le `1m.txt` sur `k=50`. Presque tous les pourcentage de CPU sont montés.
+
+**Note: la colonne Time before fait encore à la dernière version single thread.**
+| k | File | Time before | Time after | CPU usage | Improvement factor |
+| - | -- | - | - | - | - |
+|**2**|`1m.txt`|0.0162s|0.0146s|430%|1.10x|
+|**5**|`1m.txt`|2.2940s|0.5462s|845%|4.20x|
+|**50**|`1m.txt`|27.9965s|7.3970s|825%|**3.78x**|
+|**2**|`ascii-1m.txt`|0.0449s|0.0227s|566%|1.97x|
+|**5**|`ascii-1m.txt`|4.1614s|1.2541s|812%|3.31x|
+|**50**|`ascii-1m.txt`|4.2618s|1.5422s|831%|2.76x|
+|**2**|`10m.en.txt`|0.1955s|0.1335s|534%|1.46x|
+|**5**|`10m.en.txt`|4.6121s|1.8788s|562%|2.45x|
+|**50**|`10m.en.txt`|23.3860s|11.9616s|380%|1.95x|
 ---
 * Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
 * Une analyse des performances de votre version mono-threadée.
 * Une description de la stratégie de parallélisation mise en œuvre : répartition du travail entre threads, traitement des cas limites, zones de chevauchement, etc.
 * Une comparaison détaillée entre les performances des versions mono et multithreadée (temps d’exécution, scalabilité, goulots d’étranglement...).
+
+#### Gestion des petits fichiers ou petits k
+
+
+#### Conclusion parallélisation
+
+La parallélisation a permis de gagner un facteur 1 à 4 selon les cas. Nous avons atteint au maximum 830% d'usage de CPU (très souvent loin de la parallélisation parfaite des 1000%). Le challenge était surtout lié à la volonté de garder les threads complètement indépendant pour éviter l'usage de mutex, la difficulté a été et reste dans la distribution de la charge de travail tout en gardant cette indépendance.
+
+TODO finish conclusion.
+
+J'ai essayé de jouer un peu avec plus de threads que 10 mais cela ne donnait rien de mieux.
+
+On aurait pu dynamiquement décider de couper en morceaux des listes avec le plus de lettres prévue (refaire ce système de sous listes, mais pour les 2ème caractères ou alors découper en 2 la liste avec pour le 2ème caractère de `0->64` et l'autre de `65->127`). Ce qui aurait permis de mettre plus de threads à la tâche sur la même lettre quand celle-ci est plus présente que le reste. Il aurait fallu adapter un poil le code d'affichage et d'initialisations, cela n'aurait pas été difficile, le plus compliqué aurait été d'arriver à décider du découpage et du nombre de threads pour rester équilibré avec le reste (ne pas mettre 6 threads sur l'espace et plus que 4 pour tout le reste par exemple).
+
+La mention de structure de données permettant un accès en moins que $O(N)$ mentionnée dans la préparation, nous aurait imposé d'autres contraintes, ce découpage en liste nous a bien arrangé pour garder une indépendance des threads.
 
 ## Deuxième partie — Activité DTMF :
 * Une description de la partie de votre code qui a été parallélisée.

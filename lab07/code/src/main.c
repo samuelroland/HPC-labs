@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include <assert.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -167,7 +169,10 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     if (nonZeroCharsCount < nbThreads) nbThreads = nonZeroCharsCount;
 
     int min[nbThreads], max[nbThreads];
+    bool priority[nbThreads];
     size_t sums[nbThreads];
+    int performantCoresMax = 4;     // 4 performance cores
+    int attributedPriorityCount = 0;// will be <= performantCoresMax
 
     size_t remainingChars = file_size;// equivalent to the sum of remaining counts
     int remainingThreads = nbThreads;
@@ -221,6 +226,15 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         sums[threadIndex] = sum;
         remainingChars -= sum;
         remainingThreads--;
+
+        // Make it a priority thread or not
+        priority[threadIndex] = false;
+        if (attributedPriorityCount < performantCoresMax) {
+            if (sums[threadIndex] > concreteCharsPerThread) {
+                priority[threadIndex] = true;
+                attributedPriorityCount++;
+            }
+        }
         threadIndex++;
     }
 
@@ -230,14 +244,11 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         printf("Printing multi-threading strategy on %d threads \n", nbThreads);
 
         for (int i = 0; i < nbThreads; i++) {
-            printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars - %.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
+            printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars - %.2f%%)%s\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100, priority[i] ? " - PRIORITY" : "");
         }
 
         exit(2);// we don't want to run if we print the strategy
     }
-
-    // Static cut of ASCII space
-    int charsPerThread = ASCII_COUNT / nbThreads;
 
     ThreadInfo tinfo[nbThreads];
     for (int i = 0; i < nbThreads; i++) {
@@ -251,6 +262,15 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         tinfo[i].maxCharIndex = max[i];
 
         int result = pthread_create(&tinfo[i].thread_id, NULL, &manageKmersOnFileThreaded, tinfo + i);
+
+        // Set affinity to a performant core if it's a priority work
+        if (priority[i]) {
+            cpu_set_t cpuset;
+            int core_id = --performantCoresMax;// Use 3,2,1,0 for P-cores
+            CPU_ZERO(&cpuset);
+            CPU_SET(core_id, &cpuset);
+            pthread_setaffinity_np(tinfo[i].thread_id, sizeof(cpu_set_t), &cpuset);
+        }
         if (result != 0) {
             printf("Error: creating thread %d \n", i);
             exit(2);
