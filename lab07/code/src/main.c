@@ -162,10 +162,11 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     // If there are less chars than threads, we have to decrease the number of threads
     if (nonZeroCharsCount < nbThreads) nbThreads = nonZeroCharsCount;
 
-    float concreteCharsPerThread = ((float) file_size) / (float) nbThreads;
     int min[nbThreads], max[nbThreads];
     size_t sums[nbThreads];
 
+    size_t remainingChars = file_size;// equivalent to the sum of remaining counts
+    int remainingThreads = nbThreads;
     int j = 0, thread = 0;
     while (thread < nbThreads && j < ASCII_COUNT) {
         // Skip unused chars
@@ -175,6 +176,9 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
 
         min[thread] = j;
         size_t sum = 0;
+
+        // Calculate dynamically for remaining work
+        float concreteCharsPerThread = (float) remainingChars / remainingThreads;
 
         int lastj = j;
         while (j < ASCII_COUNT) {
@@ -203,11 +207,13 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         }
         max[thread] = lastj;
         sums[thread] = sum;
+        remainingChars -= sum;
+        remainingThreads--;
         thread++;
     }
 
     nbThreads = thread;// in case fewer threads we needed
-    printf("Printing multi-threading strategy on %d threads with around %.2f concrete chars per thread\n", nbThreads, concreteCharsPerThread);
+    printf("Printing multi-threading strategy on %d threads \n", nbThreads);
 
     for (int i = 0; i < nbThreads; i++) {
         printf("Thread %d: [%d '%c'; %d '%c'] -> %d different chars (%zu concrete chars) (%.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
@@ -273,7 +279,7 @@ int main(int argc, char **argv) {
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    int nbThreads = 7;
+    int nbThreads = 6;
     runKmersAlgo(content, file_size, k, tables, nbThreads);
 
     // Show the results and free entries list as we go
