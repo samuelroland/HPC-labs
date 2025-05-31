@@ -142,17 +142,37 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
     KmerTable tablesStats[ASCII_COUNT];
     runKmersAlgo(content, file_size, 1, tablesStats, 1);
 
+    // DUmp stats
+    for (int j = 0; j < ASCII_COUNT; j++) {
+        size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
+        printf("%d '%c': %zu\n", j, j, count);
+    }
+
+    int counts[ASCII_COUNT];// counts of each char in the file
+    int nonZeroCharsCount = 0;
+    for (int i = 0; i < ASCII_COUNT; i++) {
+        int count = tablesStats[i].count > 0 ? tablesStats[i].entries[0].count : 0;// the counter of occurence is in the first entry !
+        counts[i] = count;
+        if (count > 0)
+            nonZeroCharsCount++;
+    }
+
+    // Adjust number of threads to run
+    if (nonZeroCharsCount < nbThreads) {
+        nbThreads = nonZeroCharsCount;
+    }
+
     float concreteCharsPerThread = (float) file_size / nbThreads;
-    int min[nbThreads];// min indexes for each thread
-    int max[nbThreads];// same for max
+    int min[nbThreads];    // min indexes for each thread
+    int max[nbThreads];    // same for max
+    size_t sums[nbThreads];// sums of concrete chars assigned per thread, only for printing purpose
 
     int j = 0;// index of ASCII_COUNT
 
-    // if (j >= ASCII_COUNT) TODO manage that
-
+    size_t lastNonZeroCountIndex = 0;
     for (int i = 0; i < nbThreads; i++) {
         // Skip holes of unused chars, to define the next min value on a used char
-        while (j < ASCII_COUNT && (tablesStats[j].count == 0 || tablesStats[j].entries[0].count == 0)) {
+        while (j < ASCII_COUNT && counts[j] == 0) {
             j++;
         }
         min[i] = j;
@@ -160,37 +180,36 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         size_t sum = 0;
         while (j < ASCII_COUNT) {
             size_t count = tablesStats[j].count > 0 ? tablesStats[j].entries[0].count : 0;// the counter of occurence is in the first entry !
-                                                                                          // printf("count for char %d is %zu\n", j, count);
+            if (count > 0) {
+                lastNonZeroCountIndex = j;
+                // printf("Found a lastNonZeroCountIndex at %d\n", j);
+            }
+            // printf("count for char %d is %zu\n", j, count);
 
-            // TODO: improve to last used char
-            if (i == nbThreads - 1) {
-                j = ASCII_COUNT;
+            size_t sumPlusCount = sum + count;
+
+            // printf("file_size %zu, sumPlusCount %zu, concreteCharsPerThread %f, sum %zu, count %zu\n", file_size, sumPlusCount, concreteCharsPerThread, sum, count);
+            // If the difference to the sum when adding the count is bigger than without adding it, don't add it
+            if (concreteCharsPerThread - sum <= sumPlusCount - concreteCharsPerThread) {
                 break;
             }
-            size_t sumPlusCount = sum + count;
-            // printf("file_size %zu, sumPlusCount %zu, concreteCharsPerThread %f, sum %zu, count %zu\n", file_size, sumPlusCount, concreteCharsPerThread, sum, count);
-            if (sumPlusCount > concreteCharsPerThread) {
-                // If the difference to the sum when adding the count is smaller, add it
-                if (concreteCharsPerThread - sum >= sumPlusCount - concreteCharsPerThread)
-                    sum = sumPlusCount;
-                break;// we reached the maximum
-            } else {
-                sum = sumPlusCount;
-            }
+
+            sum = sumPlusCount;
             j++;
         }
+        sums[i] = sum;
 
-        if (j >= ASCII_COUNT)
-            max[i] = ASCII_COUNT;
-        else
-            max[i] = j - 1;
-        // if (i != nbThreads - 1)
-        //     min[i + 1] = j;
+        max[i] = j - 1;
+        if (i != nbThreads - 1)
+            min[i + 1] = j;
     }
-    printf("Printing multi-threading strategy\n");
+
+    max[nbThreads - 1] = lastNonZeroCountIndex;
+
+    printf("Printing multi-threading strategy on %d threads\n", nbThreads);
 
     for (int i = 0; i < nbThreads; i++) {
-        printf("Thread %d: [%d '%c'; %d '%c'] -> total of %d different chars (%f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, ((float) (max[i] - min[i] + 1)) / (float) ASCII_COUNT * 100);
+        printf("Thread %d: [%d '%c'; %d '%c'] -> total of %d different chars (%zu concrete chars) (%.2f%%)\n", i, min[i], min[i], max[i], max[i], max[i] - min[i] + 1, sums[i], ((float) sums[i]) / (float) file_size * 100);
     }
     exit(2);
 
@@ -205,12 +224,8 @@ void runKmersAlgo(char *content, size_t file_size, int k, KmerTable *tables, int
         tinfo[i].k = k;
         tinfo[i].tables = tables;
 
-        tinfo[i].minCharIndex = i * charsPerThread;
-        if (i == nbThreads - 1) {                   // last has the remaining, in case the rounding has made the last thread just a bit more
-            tinfo[i].maxCharIndex = ASCII_COUNT - 1;// the last one is 127
-        } else {
-            tinfo[i].maxCharIndex = (i + 1) * charsPerThread - 1;
-        }
+        tinfo[i].minCharIndex = min[i];
+        tinfo[i].maxCharIndex = max[i];
 
         int result = pthread_create(&tinfo[i].thread_id, NULL, &manageKmersOnFileThreaded, tinfo + i);
         if (result != 0) {
@@ -257,7 +272,7 @@ int main(int argc, char **argv) {
 
     // Init all tables
     KmerTable tables[ASCII_COUNT];
-    int nbThreads = 10;
+    int nbThreads = 20;
     runKmersAlgo(content, file_size, k, tables, nbThreads);
 
     // Show the results and free entries list as we go
