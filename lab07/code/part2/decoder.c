@@ -8,7 +8,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 // First decoder implementation based on comparing each possible tone with possible sounds to detect
@@ -51,50 +50,7 @@ inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
         return BTN_NOT_FOUND;
     }
 #endif
-
-#if DECODER_VARIANT == 2
-    float f1, f2;
-    find_main_frequencies(audio_chunk, TONE_SAMPLES_COUNT, SAMPLE_RATE, &f1, &f2);
-    if (f1 < FFT_FREQ_THRESHOLD && f1 > -1 || f2 < FFT_FREQ_THRESHOLD && f2 > -1) {
-        return BTN_NOT_FOUND;// that's very near 0, that's probably a silence...
-    }
-    LOG("Main frequencies: %.1f Hz and %.1f Hz\n", f1, f2);
-    int col = -1;
-    int line = -1;
-
-    // Swap them if needed to make further iterations easier
-    if (f1 > f2) {
-        float tmp = f1;
-        f1 = f2;
-        f2 = tmp;
-    }
-
-    // Now we can assume the f1 is the frequency of line, and f1 for the column
-    for (int i = 0; i < 4; i++) {
-        float diff = abs(LINES_FREQ[i] - (int) f1);
-        if (diff < FFT_FREQ_THRESHOLD) {
-            line = i;
-            break;
-        }
-    }
-    if (line == -1) {
-        return BTN_NOT_FOUND;
-    }
-    for (int i = 0; i < 3; i++) {
-        float diff = abs(COLUMNS_FREQ[i] - (int) f2);
-        if (diff < FFT_FREQ_THRESHOLD) {
-            col = i;
-            break;
-        }
-    }
-    if (col == -1) {
-        return BTN_NOT_FOUND;
-    }
-    int btn = line * 3 + col;
-
-    return btn;
-
-#endif
+    // Variant 2 with FFT deleted
 }
 
 int8_t dtmf_decode(const float *audio_buffer, const sf_count_t samples_count, char **result_text) {
