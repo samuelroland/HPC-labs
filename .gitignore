@@ -28,7 +28,11 @@ callgrind.out*
 perf.data
 perf.data*
 *.json
-lab07/code/*.c
-lab07/code/*.md
-lab07/code/out
-lab07/code/percent
+lab07/code/part1/*.c
+lab07/code/part1/*.md
+lab07/code/part1/out
+lab07/code/part1/percent
+lab07/code/CMakeLists.txt
+lab07/code/part1/data
+lab07/code/part1/expected
+lab07/code/part1/gen

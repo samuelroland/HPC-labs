@@ -6,7 +6,7 @@
 
 ## Première partie — Analyse des k-mers
 
-todo fichiers utilisés !
+Note: j'ai pris des fichiers de décimales de PI (`1k.txt`, `10k.txt`, `100k.txt`, `1m.txt`).
 
 ### Baseline
 Le code tel quel nous un résultat assez différent selon le nombre de `k` mais voici sur 100'000 décimales de PI le résultat. Plus `k` est élevé plus le temps est long. Nous sommes à **16.210s**.
@@ -224,12 +224,11 @@ Analysons maintenant qu'est-ce qui prend autant de temps dans `read_kmer`, c'est
 ```
 
 
-TODO pertinent ?
 J'avais fait l'hypothèse à la première lecture que le `realloc` allait valoir la peine d'être optimisé pour éviter des réallocations, hors cette mesure montre qu'il n'a été appelé que 11fois et prend moins du 1% du temps.
 ```c
   63   │       1,669 ( 0.00%)  => /usr/src/debug/glibc-2.40-25.fc41.x86_64/malloc/malloc.c:realloc (11x)
 ```
-TODO: tester avec plus grand > 3 ! maybe ce realloc prend de l'ampleur à ce moment avec beaucoup plus d'entrées.
+<!-- TODO: tester avec plus grand > 3 ! maybe ce realloc prend de l'ampleur à ce moment avec beaucoup plus d'entrées. -->
 
 Benchmark actuel
 ```
@@ -500,7 +499,7 @@ Le parcours du fichier et des entrées en lecture peuvent se faire en parallèle
 
 Je considère que mon code tourne sur une machine de 10 coeurs (la mienne en a 12) avec 4 coeurs performance sur les numéros 0-3. Je vais donc démarrer 10 threads au maximum ou moins si cela ne fait pas sens.
 
-TODO supposition performance core number okay ??
+<!-- TODO supposition performance core number okay ?? -->
 
 Pour respecter ces contraintes, je vois deux approches possibles, en considérant 10 threads disponibles:
 1. Découper le fichier en morceaux équivalents pour 9 threads. Avoir un thread qui gère tout ce qui écriture, et 9 autres travaillent à gérer les kmers sur leur section du fichier. Pour protéger la sous liste spécifique dans laquelle il y aura une modification, on retrouve ainsi un pattern vu en cours de PCO de lecteurs/rédacteurs, une sorte de mutex amélioré qui permet d'accéder à la liste en lecture à plusieurs thread lecteurs ou tout seul pour un thread rédacteur. On aurait besoin de ce système pour chaque sous liste. L'intérêt d'avoir géré les listes séparemment pour chaque premier caractère possible, permet de bloquer seulement une liste à la fois en écriture et bloquer temporairement uniquement une partie des threads lecteurs.
@@ -508,7 +507,7 @@ Pour respecter ces contraintes, je vois deux approches possibles, en considéran
 
 De par son indépendance et son absence complet de section critiques, je vais prendre l'option deux, cela jouera probablement en faveur de simplifier l'implémentation et j'imagine améliorer la performance.
 
-TODO: fix les typos avec language tool !!!
+<!-- TODO: fix les typos avec language tool !!! -->
 
 J'utilise la commande suivante pour benchmarker, j'utilise (à nouveau :)) `time -v` pour récupérer un pourcentage d'usage des CPUs globalement, pour avoir une idée d'à quel point on utilise bien nos 10 coeurs. Je pin les threads sur les coeurs 1 à 11 (comme il y a 11 threads qui vont tourner (thread principal + 10 démarrés).
 
@@ -664,11 +663,6 @@ La plus grande augmentation de facteur de 2.98 à 3.78 pour le `1m.txt` sur `k=5
 |**2**|`10m.en.txt`|0.1955s|0.1335s|534%|1.46x|
 |**5**|`10m.en.txt`|4.6121s|1.8788s|562%|2.45x|
 |**50**|`10m.en.txt`|23.3860s|11.9616s|380%|1.95x|
----
-* Une explication des éléments inefficaces dans le code fourni, et des améliorations que vous y avez apportées.
-* Une analyse des performances de votre version mono-threadée.
-* Une description de la stratégie de parallélisation mise en œuvre : répartition du travail entre threads, traitement des cas limites, zones de chevauchement, etc.
-* Une comparaison détaillée entre les performances des versions mono et multithreadée (temps d’exécution, scalabilité, goulots d’étranglement...).
 
 #### Gestion des petits fichiers ou petits k
 Les benchmarks précédents se sont concentrés sur des fichiers de grande taille, le multi-threading a été désactivé uniquement pour `k=1`. Hors les fichiers de petites tailles sont traités beaucoup plus rapidement que les grands, même avec un grand `k=600`, ce qui signifie que l'overhead des threads est parfois contre productive.
@@ -766,15 +760,13 @@ En fait la différence est super minime, seulement 0.2ms, peut-être que cela es
 
 #### Conclusion parallélisation
 
-La parallélisation a permis de gagner un facteur 1 à 4 selon les cas. Nous avons atteint au maximum 830% d'usage de CPU (très souvent loin de la parallélisation parfaite des 1000%). Le challenge était surtout lié à la volonté de garder les threads complètement indépendant pour éviter l'usage de mutex, la difficulté a été et reste dans la distribution de la charge de travail tout en gardant cette indépendance.
+Même en exécutant sur un fichier encore plus `1g.en.txt` (1GB d'anglais), on obtient `129.13s` avant et `50.24s` après, ce qui ne fait que 2.58 fois de gain.
 
-TODO finish conclusion.
-
-J'ai essayé de jouer un peu avec plus de threads que 10 mais cela ne donnait rien de mieux.
+La parallélisation a permis de gagner un facteur 1 à 4 selon les cas. Nous avons atteint au maximum 830% d'usage de CPU (très souvent loin de la parallélisation parfaite des 1000%). Le challenge était surtout lié à la volonté de garder les threads complètement indépendant pour éviter l'usage de mutex, la difficulté a été et reste dans la distribution de la charge de travail tout en gardant cette indépendance. J'ai essayé de jouer un peu avec plus de threads que 10 mais cela ne donnait rien de mieux.
 
 On aurait pu dynamiquement décider de couper en morceaux des listes avec le plus de lettres prévue (refaire ce système de sous listes, mais pour les 2ème caractères ou alors découper en 2 la liste avec pour le 2ème caractère de `0->64` et l'autre de `65->127`). Ce qui aurait permis de mettre plus de threads à la tâche sur la même lettre quand celle-ci est plus présente que le reste. Il aurait fallu adapter un poil le code d'affichage et d'initialisations, cela n'aurait pas été difficile, le plus compliqué aurait été d'arriver à décider du découpage et du nombre de threads pour rester équilibré avec le reste (ne pas mettre 6 threads sur l'espace et plus que 4 pour tout le reste par exemple).
 
-La mention de structure de données permettant un accès en moins que $O(N)$ mentionnée dans la préparation, nous aurait imposé d'autres contraintes, ce découpage en liste nous a bien arrangé pour garder une indépendance des threads.
+La mention de structure de données permettant un accès en moins que $O(N)$ mentionnée dans la préparation, nous aurait imposé d'autres contraintes, ce découpage en liste nous a sans le voir bien arrangé pour garder une indépendance des threads. Après réflexion avec Aubry, il semble qu'avec un hashmap il aurait été possible d'avoir une hashmap par threads, tout en restant avec un découpage de l'espace des caractères. Il n'y aurait pas eu besoin de fusion, juste d'afficher tous les résultats de toutes les hashmaps l'une après l'autre à la fin.
 
 ## Deuxième partie — Activité DTMF :
 * Une description de la partie de votre code qui a été parallélisée.

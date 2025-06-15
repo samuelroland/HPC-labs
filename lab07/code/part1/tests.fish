@@ -92,30 +92,33 @@ function append_results
     printf "|%.4fs" $beforetime >>$RESULT_FILE
     printf "|%.4fs" $aftertime >>$RESULT_FILE
     set factor (echo "scale=2; (" $beforetime / $aftertime ")" | bc)
-    printf "|%d%%" (cat percent | grep -oP "\d+") >>$RESULT_FILE
+    # printf "|%d%%" (cat percent | grep -oP "\d+") >>$RESULT_FILE
     printf "|%.2fx|\n" $factor >>$RESULT_FILE
     color green (printf "$factor""x: %.4fs -> %.4fs" $beforetime $aftertime)
 end
 
 set beforebin k-mer-single-thread
 set files 1m ascii-1m 10m.en
+set files 1k 10k 100k
 set counts 2 5 50
+set counts 1 2 3 4 5 6 7 8 9 10 11 15 20 30 40 50 80 90 100 600
 for file in $files
     set file $file.txt
     color cyan "File $file"
     for count in $counts
         set runs 10
-        if test $count -gt 4
-            set runs 3
-        end
-        if test $file = ascii-1m.txt
-            set runs 3
-        end
+        # if test $count -gt 4
+        #     set runs 3
+        # end
+        # if test $file = ascii-1m.txt
+        #     set runs 3
+        # end
         echo -n "k=$count: "
         # enable this line only the first time
-        # hyperfine --max-runs $runs -N "taskset -c 3 ./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
+        taskset -c 3 hyperfine --max-runs $runs -N "./build/$beforebin data/$file $count" --export-json base.$file.$count.out.json
         # run multithreaded version more times
-        hyperfine --max-runs $runs "set -o pipefail; taskset -c 1-11 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
+        taskset -c 0-9 hyperfine --max-runs $runs -N "./build/k-mer data/$file $count" --export-json new.$file.$count.out.json
+        # hyperfine --max-runs $runs "set -o pipefail; taskset -c 0-9 /usr/bin/time -v ./build/k-mer data/$file $count |& grep 'Percent of CPU' > percent" --export-json new.$file.$count.out.json
         color blue (cat percent)
         append_results $count $file
     end
