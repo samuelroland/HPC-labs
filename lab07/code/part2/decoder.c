@@ -30,10 +30,9 @@ inline float get_near_score(const float *audio_chunk, float *reference_tone) {
 // Calculate the average of scores to detect outliers
 inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
-#if DECODER_VARIANT == 1
-
     float min_distance_btn = 200;
     u_int8_t min_btn = BTN_NOT_FOUND;
+
     for (int i = 0; i < BTN_NUMBER; i++) {
         float score = get_near_score(audio_chunk, freqs_buffers[i]);
         if (score < min_distance_btn) {
@@ -49,7 +48,7 @@ inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
         return BTN_NOT_FOUND;
     }
-#endif
+
     // Variant 2 with FFT deleted
 }
 
