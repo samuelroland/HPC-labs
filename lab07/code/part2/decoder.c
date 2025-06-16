@@ -8,7 +8,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 // First decoder implementation based on comparing each possible tone with possible sounds to detect
@@ -21,21 +20,8 @@
 
 inline float get_near_score(const float *audio_chunk, float *reference_tone) {
     double sum = 0;
-    double sums[20];        // a bit more place than necessary
-    int globalNbThreads = 0;// initialized by thread 0
-#pragma omp parallel
-    {
-        int id = omp_get_thread_num();
-        double local_sum = 0;
-        int nbThreads = omp_get_num_threads();
-        if (id == 0) globalNbThreads = nbThreads;
-        for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
-            local_sum += fabs(audio_chunk[i] - reference_tone[i]);
-        }
-        sums[id] = local_sum;
-    }
-    for (int i = 0; i < globalNbThreads; i++) {
-        sum += sums[i];
+    for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
+        sum += fabs(audio_chunk[i] - reference_tone[i]);
     }
     return sum / TONE_SAMPLES_COUNT;
 }
@@ -46,13 +32,18 @@ inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
     float min_distance_btn = 200;
     u_int8_t min_btn = BTN_NOT_FOUND;
 
+#pragma omp parallel for
     for (int i = 0; i < BTN_NUMBER; i++) {
         float score = get_near_score(audio_chunk, freqs_buffers[i]);
-        if (score < min_distance_btn) {
-            min_distance_btn = score;
-            min_btn = i;
+#pragma omp critical
+        {
+            if (score < min_distance_btn) {
+                min_distance_btn = score;
+                min_btn = i;
+            }
         }
     }
+
     if (min_distance_btn < MIN_DISTANCE_MAX) {
         LOG("Found button %d with score %f\n", min_btn, min_distance_btn);
         return min_btn;

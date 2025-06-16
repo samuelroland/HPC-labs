@@ -1,7 +1,5 @@
 # Rapport HPC Lab 7 - Parallélisme des tâches - Samuel Roland
 
-[[toc]]
-
 <!-- TODO support toc ? -->
 
 ## Première partie — Analyse des k-mers
@@ -447,7 +445,7 @@ Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 | Refactoring de read_kmer                                                | 11.492s   |  1.032x                          | 1.411x                          |
 | Optimisation de add_kmer par division en sous listes et propre memcmp   | 834.5ms   |  **13.77x**                           | 19.43x                          |
 | Optimisation des comparaisons de groupe de 8 et 4 caractères            | 523.5ms   |  1.595x                           | 30.97x                          |
-| Optimisation de l'usage du cache                                        | 200.9ms   |  2.605x                           | **80.70x**                          |
+| Optimisation de l'usage du cache                                        | **200.9ms**   |  2.605x                           | **80.70x**                          |
 
 
 On voit clairement que la section la plus efficace est la réduction de la la taille des listes, puisqu'elle a largement réduit l'espace de recherche. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste (sous `KmerTable rest`).
@@ -768,7 +766,7 @@ On aurait pu dynamiquement décider de couper en morceaux des listes avec le plu
 
 La mention de structure de données permettant un accès en moins que $O(N)$ mentionnée dans la préparation, nous aurait imposé d'autres contraintes, ce découpage en liste nous a sans le voir bien arrangé pour garder une indépendance des threads. Après réflexion avec Aubry, il semble qu'avec un hashmap il aurait été possible d'avoir une hashmap par threads, tout en restant avec un découpage de l'espace des caractères. Il n'y aurait pas eu besoin de fusion, juste d'afficher tous les résultats de toutes les hashmaps l'une après l'autre à la fin.
 
-## Deuxième partie — Activité DTMF :
+## Deuxième partie — Activité DTMF
 
 ### Baseline de départ
 ```sh
@@ -853,9 +851,42 @@ On gagne un peu de `4.270s` à `4.160s` mais on reste largement en dessus du dé
   Range (min … max):    4.075 s …  4.243 s    3 runs
 ```
 
+Comme 3ème tentative, attaquons nous à un niveau plus, en reprenant l'implémentation de départ de `get_near_score` mais en changeant `detect_button` qui fait les appels de `get_near_score`.
 
-* Une description de la partie de votre code qui a été parallélisée.
-* Une explication claire de la stratégie de parallélisation utilisée.
-* Une justification des choix effectués, et une évaluation de l’intérêt et de l’efficacité de votre parallélisation.
+```c
+inline uint8_t detect_button(const float *audio_chunk, float **freqs_buffers) {
 
+    float min_distance_btn = 200;
+    u_int8_t min_btn = BTN_NOT_FOUND;
+
+    for (int i = 0; i < BTN_NUMBER; i++) {
+        float score = get_near_score(audio_chunk, freqs_buffers[i]);
+        if (score < min_distance_btn) {
+            min_distance_btn = score;
+            min_btn = i;
+        }
+    }
+```
+Trouver le score minimum devrait aussi pouvoir se faire avec openmp.
+
+Avec cette implémentation qui parallélise simplement en scheduling automatique, la recherche pour chaque bouton. J'avais mis la section critique `#pragma omp critical` uniquement dans le `if` au départ mais cela est faux, la condition fait partie de la section critique.
+```c
+#pragma omp parallel for
+    for (int i = 0; i < BTN_NUMBER; i++) {
+        float score = get_near_score(audio_chunk, freqs_buffers[i]);
+#pragma omp critical
+        {
+            if (score < min_distance_btn) {
+                min_distance_btn = score;
+                min_btn = i;
+            }
+        }
+    }
+```
+
+Au lieu de `1.649s` on est bien mieux avec **940ms** !!
+```sh
+  Time (mean ± σ):     940.6 ms ±   9.9 ms    [User: 2932.2 ms, System: 1422.7 ms]
+  Range (min … max):   929.3 ms … 947.8 ms    3 runs
+```
 
