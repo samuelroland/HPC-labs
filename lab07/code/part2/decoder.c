@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 // First decoder implementation based on comparing each possible tone with possible sounds to detect
@@ -20,16 +21,21 @@
 
 inline float get_near_score(const float *audio_chunk, float *reference_tone) {
     double sum = 0;
+    double sums[20];        // a bit more place than necessary
+    int globalNbThreads = 0;// initialized by thread 0
 #pragma omp parallel
     {
         int id = omp_get_thread_num();
         double local_sum = 0;
         int nbThreads = omp_get_num_threads();
+        if (id == 0) globalNbThreads = nbThreads;
         for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
             local_sum += fabs(audio_chunk[i] - reference_tone[i]);
         }
-#pragma omp critical
-        sum += local_sum;
+        sums[id] = local_sum;
+    }
+    for (int i = 0; i < globalNbThreads; i++) {
+        sum += sums[i];
     }
     return sum / TONE_SAMPLES_COUNT;
 }

@@ -822,7 +822,7 @@ Benchmark 1: build/dtmf_encdec_buffers decode verylong2.wav
 Au lieu de `1.649s` on est bien pire avec `4.270s`...
 
 
-fail
+2ème implémentation, cette fois-ci avec un tableau de somme intermédiaire, pour éviter de devoir avoir une section critique. Le thread principal fait la somme à la fin une fois que tous les threads ont terminés. Le problème du "false sharing" est minime comme il n'y aura autant d'écriture dans ce tableau partagé `sums` que de threads.
 ```c
 inline float get_near_score(const float *audio_chunk, float *reference_tone) {
     double sum = 0;
@@ -837,12 +837,20 @@ inline float get_near_score(const float *audio_chunk, float *reference_tone) {
         for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
             local_sum += fabs(audio_chunk[i] - reference_tone[i]);
         }
+        sums[id] = local_sum;
     }
     for (int i = 0; i < globalNbThreads; i++) {
         sum += sums[i];
     }
     return sum / TONE_SAMPLES_COUNT;
 }
+```
+
+On gagne un peu de `4.270s` à `4.160s` mais on reste largement en dessus du départ...
+```sh
+> hyperfine -r 3 -N 'build/dtmf_encdec_buffers decode verylong2.wav'
+  Time (mean ± σ):      4.160 s ±  0.084 s    [User: 8.321 s, System: 13.312 s]
+  Range (min … max):    4.075 s …  4.243 s    3 runs
 ```
 
 
