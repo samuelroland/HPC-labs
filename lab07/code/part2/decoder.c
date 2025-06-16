@@ -1,9 +1,9 @@
 #include "decoder.h"
 #include "const.h"
 #include "encoder.h"
-#include "fft.h"
 #include <assert.h>
 #include <math.h>
+#include <omp.h>
 #include <sndfile.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -20,9 +20,16 @@
 
 inline float get_near_score(const float *audio_chunk, float *reference_tone) {
     double sum = 0;
-
-    for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
-        sum += fabs(audio_chunk[i] - reference_tone[i]);
+#pragma omp parallel
+    {
+        int id = omp_get_thread_num();
+        double local_sum = 0;
+        int nbThreads = omp_get_num_threads();
+        for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
+            local_sum += fabs(audio_chunk[i] - reference_tone[i]);
+        }
+#pragma omp critical
+        sum += local_sum;
     }
     return sum / TONE_SAMPLES_COUNT;
 }

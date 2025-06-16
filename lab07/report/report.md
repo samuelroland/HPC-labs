@@ -450,7 +450,7 @@ Voici un résumé des améliorations sur le fichier `100k.txt` avec `k=10`.
 | Optimisation de l'usage du cache                                        | 200.9ms   |  2.605x                           | **80.70x**                          |
 
 
-On voit clairement que la section qui a diminué énormément la taille des listes et donc l'espace de recherche a eu un impact massif. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste.
+On voit clairement que la section la plus efficace est la réduction de la la taille des listes, puisqu'elle a largement réduit l'espace de recherche. Si on voulait continuer encore, il faudrait passer à une hashmap pour diminuer encore largement le nombre d'éléments comparés. A noter aussi que les performances ne sont pas aussi élevées pour les fichiers avec des caractères ASCII aléatoire, puisque tous les caractères spéciaux sont placés dans une seule liste (sous `KmerTable rest`).
 
 ### Benchmark général pour développement du multithreading
 J'ai choisi de prendre les fichiers `1m.txt` et `ascii-1m.txt` et k = `2 5 50`. J'ai aussi généré un fichier `10m.en.txt` (10MB de notes prises en anglais sur des outils ou cours).
@@ -760,15 +760,94 @@ En fait la différence est super minime, seulement 0.2ms, peut-être que cela es
 
 #### Conclusion parallélisation
 
-Même en exécutant sur un fichier encore plus `1g.en.txt` (1GB d'anglais), on obtient `129.13s` avant et `50.24s` après, ce qui ne fait que 2.58 fois de gain.
+Même en exécutant sur un fichier encore plus grand `1g.en.txt` (1GB d'anglais), on obtient `129.13s` avant et `50.24s` après, ce qui ne fait que **2.58** fois de gain.
 
-La parallélisation a permis de gagner un facteur 1 à 4 selon les cas. Nous avons atteint au maximum 830% d'usage de CPU (très souvent loin de la parallélisation parfaite des 1000%). Le challenge était surtout lié à la volonté de garder les threads complètement indépendant pour éviter l'usage de mutex, la difficulté a été et reste dans la distribution de la charge de travail tout en gardant cette indépendance. J'ai essayé de jouer un peu avec plus de threads que 10 mais cela ne donnait rien de mieux.
+La parallélisation **a permis de gagner un facteur 1 à 4** selon les cas. Nous avons atteint au maximum **830%** d'usage de CPU (très souvent loin de la parallélisation parfaite des 1000%). Le challenge était surtout lié à la volonté de garder les threads complètement indépendant pour éviter l'usage de mutex, la difficulté a été et reste dans la distribution de la charge de travail tout en gardant cette indépendance. J'ai essayé de jouer un peu avec plus de threads que 10 mais cela ne donnait rien de mieux.
 
 On aurait pu dynamiquement décider de couper en morceaux des listes avec le plus de lettres prévue (refaire ce système de sous listes, mais pour les 2ème caractères ou alors découper en 2 la liste avec pour le 2ème caractère de `0->64` et l'autre de `65->127`). Ce qui aurait permis de mettre plus de threads à la tâche sur la même lettre quand celle-ci est plus présente que le reste. Il aurait fallu adapter un poil le code d'affichage et d'initialisations, cela n'aurait pas été difficile, le plus compliqué aurait été d'arriver à décider du découpage et du nombre de threads pour rester équilibré avec le reste (ne pas mettre 6 threads sur l'espace et plus que 4 pour tout le reste par exemple).
 
 La mention de structure de données permettant un accès en moins que $O(N)$ mentionnée dans la préparation, nous aurait imposé d'autres contraintes, ce découpage en liste nous a sans le voir bien arrangé pour garder une indépendance des threads. Après réflexion avec Aubry, il semble qu'avec un hashmap il aurait été possible d'avoir une hashmap par threads, tout en restant avec un découpage de l'espace des caractères. Il n'y aurait pas eu besoin de fusion, juste d'afficher tous les résultats de toutes les hashmaps l'une après l'autre à la fin.
 
 ## Deuxième partie — Activité DTMF :
+
+### Baseline de départ
+```sh
+> hyperfine -r 3 -N 'build/dtmf_encdec_buffers_single decode verylong2.wav'
+  Time (mean ± σ):      1.649 s ±  0.009 s    [User: 1.226 s, System: 0.418 s]
+```
+
+**1.649s** pour le fichier `verylong2.wav` qui correspond à la sortie de `txt/verylong2.txt` qui contient des répétitions de l'alphabet sur 8000 caractères.
+
+### Parallélisation
+
+Un rapide coup de `callgrind` nous rappelle que la zone la plus chaude est la fonction `get_near_score`, nous allons nous concentrer là dessus en premier.
+```sh
+              .           inline float get_near_score(const float *audio_chunk, float *reference_tone) {
+              .               double sum = 0;
+        157,289 ( 0.00%)  
+              .               for (sf_count_t i = 0; i < TONE_SAMPLES_COUNT; i++) {
+  4,162,338,807 (37.42%)          sum += fabs(audio_chunk[i] - reference_tone[i]);
+  6,936,444,900 (62.35%)      }
+              .               return sum / TONE_SAMPLES_COUNT;
+        314,578 ( 0.00%)  }
+```
+
+
+Première implémentation, avec une parallélisation basique, 
+```c
+inline float get_near_score(const float *audio_chunk, float *reference_tone) {
+    double sum = 0;
+#pragma omp parallel
+    {
+        int id = omp_get_thread_num();
+        double local_sum = 0;
+        int nbThreads = omp_get_num_threads();
+        for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
+            local_sum += fabs(audio_chunk[i] - reference_tone[i]);
+        }
+#pragma omp critical
+        sum += local_sum;
+    }
+    return sum / TONE_SAMPLES_COUNT;
+}
+```
+
+```sh
+> hyperfine -r 3 -N 'build/dtmf_encdec_buffers decode verylong2.wav'
+Benchmark 1: build/dtmf_encdec_buffers decode verylong2.wav
+  Time (mean ± σ):      4.270 s ±  0.070 s    [User: 8.844 s, System: 13.157 s]
+  Range (min … max):    4.192 s …  4.325 s    3 runs
+```
+
+Au lieu de `1.649s` on est bien pire avec `4.270s`...
+
+
+fail
+```c
+inline float get_near_score(const float *audio_chunk, float *reference_tone) {
+    double sum = 0;
+    double sums[20];        // a bit more place than necessary
+    int globalNbThreads = 0;// initialized by thread 0
+#pragma omp parallel
+    {
+        int id = omp_get_thread_num();
+        double local_sum = 0;
+        int nbThreads = omp_get_num_threads();
+        if (id == 0) globalNbThreads = nbThreads;
+        for (sf_count_t i = id; i < TONE_SAMPLES_COUNT; i += nbThreads) {
+            local_sum += fabs(audio_chunk[i] - reference_tone[i]);
+        }
+    }
+    for (int i = 0; i < globalNbThreads; i++) {
+        sum += sums[i];
+    }
+    return sum / TONE_SAMPLES_COUNT;
+}
+```
+
+
 * Une description de la partie de votre code qui a été parallélisée.
 * Une explication claire de la stratégie de parallélisation utilisée.
 * Une justification des choix effectués, et une évaluation de l’intérêt et de l’efficacité de votre parallélisation.
+
+
